@@ -115,7 +115,6 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
                   << " triangles\n";
     }
 
-    populateVertexNeighbors();  
     if (vertices.size() > static_cast<size_t>(std::numeric_limits<GLsizei>::max()))
         throw std::runtime_error("OBJ is too large for one draw call");
 
@@ -139,7 +138,10 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
 
     for (auto &v : vertices_)
         v.position = (v.position - center) * (2.0f / span);
-        
+
+    populateVertexNeighbors();
+    populateVertexNormals();  
+
     count_ = static_cast<GLsizei>(vertices.size());
     number_parts = count_ / 3;
 
@@ -160,6 +162,8 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
                           reinterpret_cast<void *>(offsetof(Vertex, normal)));
     glBindVertexArray(0);
     std::cout << "Assembly: " << paths.size() << " OBJ file(s), " << count_ / 3 << " triangles\n";
+
+    setupNormalBuffers();
 }
 
 // create indexed mesh by populating vertices_ and triangles_ from obj reader 
@@ -198,6 +202,7 @@ void Mesh::createIndexedMesh(
 
         GeometryVertex vertex{};
         vertex.position = position;
+        vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f);
 
         vertices_.push_back(vertex);
     }
@@ -287,11 +292,95 @@ void Mesh::populateVertexNeighbors() {
     }
 }
 
+void Mesh::populateVertexNormals() {
+    for (const auto& tri : triangles_) {
+        unsigned int ind0 = tri.v0;
+        unsigned int ind1 = tri.v1;
+        unsigned int ind2 = tri.v2;
+
+        GeometryVertex& v0 = vertices_[ind0];
+        GeometryVertex& v1 = vertices_[ind1];
+        GeometryVertex& v2 = vertices_[ind2];
+
+        glm::vec3 p0 = v0.position;
+        glm::vec3 p1 = v1.position;
+        glm::vec3 p2 = v2.position;
+
+        glm::vec3 faceNormal = cross(p1 - p0, p2 - p0);
+
+        v0.normal += faceNormal;
+        v1.normal += faceNormal;
+        v2.normal += faceNormal;
+    }
+    for (auto& v : vertices_) {
+        v.normal = normalize(v.normal);
+    }
+}
+
+std::vector<glm::vec3> Mesh::createNormalVisualization() const {
+    std::vector<glm::vec3> normalData;
+    const float lineLength = 0.1f;
+
+    for (const auto& v : vertices_) {
+        glm::vec3 start = v.position;
+        glm::vec3 end = v.position + lineLength * v.normal;
+        normalData.push_back(start);
+        normalData.push_back(end);
+    }
+
+    return normalData;
+}
+
+void Mesh::setupNormalBuffers()
+{
+    std::vector<glm::vec3> normalData = createNormalVisualization();
+
+    if (normalData.size() > static_cast<size_t>(std::numeric_limits<GLsizei>::max()))
+    {
+        throw std::runtime_error("Too many normal visualization vertices");
+    }
+    normalCount_ = static_cast<GLsizei>(normalData.size());
+
+    glGenVertexArrays(1, &normalVAO_);
+    glGenBuffers(1, &normalVBO_);
+
+    glBindVertexArray(normalVAO_);
+
+    glBindBuffer(GL_ARRAY_BUFFER, normalVBO_);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        normalData.size() * sizeof(glm::vec3),
+        normalData.data(),
+        GL_STATIC_DRAW
+    );
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(glm::vec3),
+        nullptr
+    );
+
+    glBindVertexArray(0);
+}
+
 Mesh::~Mesh()
 {
     // The owning scene must be destroyed while its OpenGL context is still current.
     glDeleteBuffers(1, &vbo_);
     glDeleteVertexArrays(1, &vao_);
+    glDeleteBuffers(1, &normalVBO_);
+    glDeleteVertexArrays(1, &normalVAO_);
+}
+
+void Mesh::DrawVertexNormals() const
+{
+    glBindVertexArray(normalVAO_);
+    glDrawArrays(GL_LINES, 0, normalCount_);
+    glBindVertexArray(0);
 }
 
 void Mesh::Draw() const

@@ -30,4 +30,5 @@ class Object
     virtual ~Object() = default;
     // Geometry submission only; Render_World binds the shader and uniforms first.
     virtual void Draw() const = 0;
+    virtual void DrawVertexNormals() const = 0;
 };

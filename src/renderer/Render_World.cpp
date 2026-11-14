@@ -56,5 +56,6 @@ void Render_World::Render(int width, int height)
         }
         // The vertex shader now has transforms; the fragment shader has the material.
         object->Draw();
+        //object->DrawVertexNormals();
     }
 }

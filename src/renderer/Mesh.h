@@ -40,6 +40,7 @@ class Mesh : public Object
     ~Mesh() override;
     Mesh(const Mesh &) = delete;
     Mesh &operator=(const Mesh &) = delete;
+    void DrawVertexNormals() const override;
     void Draw() const override;
 
   private:
@@ -50,9 +51,18 @@ class Mesh : public Object
 
     void createIndexedMesh(const tinyobj::ObjReader reader, size_t baseVertex);
     void populateVertexNeighbors();
+    void populateVertexNormals();
+    std::vector<glm::vec3> createNormalVisualization() const; // return a list of normal start/end points to send to gpu for rendering
+    void setupNormalBuffers();
+
     // VAO describes attribute layout; VBO owns interleaved position/normal data.
     // Copying is disabled because two Mesh instances must not own the same handles.
     GLuint vao_ = 0;
     GLuint vbo_ = 0;
     GLsizei count_ = 0;
+
+    // for normal visualization
+    GLuint normalVAO_ = 0;
+    GLuint normalVBO_ = 0;
+    GLsizei normalCount_ = 0;
 };
