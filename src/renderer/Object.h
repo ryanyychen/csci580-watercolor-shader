@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include "Texture.h"
 
 class Shader;
 
@@ -12,6 +13,9 @@ struct Material
     glm::vec3 color_diffuse{0.22f, 0.48f, 0.65f};
     glm::vec3 color_specular{0.5f};
     float specular_power = 32.0f;
+
+    Texture * texture = nullptr;
+    float noise_scale = 1.0f;
 };
 
 // Adapted from ../Raytracer/object.h for rasterized objects.

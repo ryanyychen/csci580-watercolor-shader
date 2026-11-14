@@ -2,6 +2,7 @@
 #include "renderer/Image_Output.h"
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
+#include "renderer/TextureGenerator.h"
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <iostream>
@@ -71,7 +72,7 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
 {
     // All GPU resources are created after main() has made an OpenGL context current.
     // Declare the shader before the world so objects are destroyed before their shader.
-    Shader shader(resources / "shaders/phong.vert", resources / "shaders/phong.frag");
+    Shader shader(resources / "shaders/watercolor.vert", resources / "shaders/watercolor.frag");
     Render_World world;
     auto mesh = std::make_unique<Mesh>(meshPaths);
     mesh->material_shader = &shader;
@@ -81,6 +82,12 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     mesh->material.color_diffuse = glm::vec3(0.8f, 0.02f, 0.02f);
     mesh->material.color_specular = glm::vec3(1.0f);
     mesh->material.specular_power = 64.0f;
+    
+    // generate noise textures for watercolor shading
+    generateGradientGrid();
+    const int noiseTextureSize = 256;
+    float ** noiseValues = createPerlinTexture(noiseTextureSize);
+    mesh->material.texture = new Texture(noiseTextureSize, noiseTextureSize, noiseValues);
 
     world.objects.push_back(std::move(mesh));
     world.lights.front().position = glm::vec3(3.0f, 4.0f, 4.0f);

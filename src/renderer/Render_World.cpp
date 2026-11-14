@@ -37,7 +37,15 @@ void Render_World::Render(int width, int height)
         shader.set("uColorDiffuse", object->material.color_diffuse);
         shader.set("uColorSpecular", object->material.color_specular);
         shader.set("uSpecularPower", object->material.specular_power);
+        shader.set("uNoiseScale", object->material.noise_scale);
         shader.set("uLightCount", static_cast<int>(lights.size()));
+
+        constexpr int noiseTextureUnit = 0;
+        if (object->material.texture)
+        {
+            object->material.texture->Bind(GL_TEXTURE0 + noiseTextureUnit);
+            shader.set("noiseTexture", noiseTextureUnit);
+        }
 
         for (size_t i = 0; i < lights.size(); ++i)
         {
