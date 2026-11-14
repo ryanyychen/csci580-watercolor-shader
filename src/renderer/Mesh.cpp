@@ -1,5 +1,4 @@
 #include "Mesh.h"
-#include <tiny_obj_loader.h>
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
@@ -11,11 +10,13 @@
 
 namespace
 {
+
 // Match shader locations 0 and 1 with a position and normal for each corner.
 struct Vertex
 {
     glm::vec3 position;
     glm::vec3 normal;
+
 };
 
 glm::vec3 positionAt(const tinyobj::attrib_t &attributes, int index)
@@ -39,7 +40,7 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
     if (paths.empty())
         throw std::runtime_error("Expected at least one OBJ file");
 
-    std::vector<Vertex> vertices;
+    std::vector<Vertex> vertices; // expanded vertex data for rendering
     // Append parts in their original coordinates, then fit the combined bounds.
     // Centering individual files would stack wheels, wings, and body at the origin.
     for (const auto &path : paths)
@@ -56,6 +57,9 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
             throw std::runtime_error("Cannot load OBJ " + path.string() + ": " + reader.Error());
         if (!reader.Warning().empty())
             std::cerr << reader.Warning();
+
+        size_t baseVertex = vertices_.size();
+        createIndexedMesh(reader, baseVertex);
 
         const auto &attributes = reader.GetAttrib();
 
@@ -110,6 +114,8 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
         std::cout << "Loaded " << path << ": " << (vertices.size() - firstVertex) / 3
                   << " triangles\n";
     }
+
+    populateVertexNeighbors();  
     if (vertices.size() > static_cast<size_t>(std::numeric_limits<GLsizei>::max()))
         throw std::runtime_error("OBJ is too large for one draw call");
 
@@ -131,6 +137,9 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
     for (auto &v : vertices)
         v.position = (v.position - center) * (2.0f / span);
 
+    for (auto &v : vertices_)
+        v.position = (v.position - center) * (2.0f / span);
+        
     count_ = static_cast<GLsizei>(vertices.size());
     number_parts = count_ / 3;
 
@@ -151,6 +160,131 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
                           reinterpret_cast<void *>(offsetof(Vertex, normal)));
     glBindVertexArray(0);
     std::cout << "Assembly: " << paths.size() << " OBJ file(s), " << count_ / 3 << " triangles\n";
+}
+
+// create indexed mesh by populating vertices_ and triangles_ from obj reader 
+// baseVertex specifies the index offset to account for multiple objects 
+void Mesh::createIndexedMesh(
+    tinyobj::ObjReader reader,
+    size_t baseVertex)
+{
+    const auto& attributes = reader.GetAttrib();
+
+    // 1. Append this OBJ's unique positions.
+    const size_t numVertices = attributes.vertices.size() / 3;
+
+    const size_t maxIndex =
+        static_cast<size_t>(std::numeric_limits<unsigned int>::max());
+
+    if (baseVertex > maxIndex || numVertices > maxIndex - baseVertex)
+        throw std::overflow_error("Too many geometry vertices");
+
+    for (size_t i = 0; i < numVertices; ++i)
+    {
+        const size_t index = i * 3;
+
+        glm::vec3 position(
+            attributes.vertices[index],
+            attributes.vertices[index + 1],
+            attributes.vertices[index + 2]
+        );
+
+        if (!std::isfinite(position.x) ||
+            !std::isfinite(position.y) ||
+            !std::isfinite(position.z))
+        {
+            throw std::runtime_error("OBJ has a non-finite position");
+        }
+
+        GeometryVertex vertex{};
+        vertex.position = position;
+
+        vertices_.push_back(vertex);
+    }
+
+    // 2. Read triangle connectivity.
+    const auto& shapes = reader.GetShapes();
+
+    for (const auto& shape : shapes)
+    {
+        const auto& mesh = shape.mesh;
+        size_t indexOffset = 0;
+
+        for (unsigned char faceSize : mesh.num_face_vertices)
+        {
+            if (indexOffset > mesh.indices.size() ||
+                faceSize > mesh.indices.size() - indexOffset)
+            {
+                throw std::runtime_error("Invalid OBJ face indices");
+            }
+
+            if (faceSize != 3)
+            {
+                throw std::runtime_error(
+                    "OBJ triangulation failed; expected triangles"
+                );
+            }
+
+            // 3. Retrieve and validate the local OBJ indices.
+            int i0 = mesh.indices[indexOffset + 0].vertex_index;
+            int i1 = mesh.indices[indexOffset + 1].vertex_index;
+            int i2 = mesh.indices[indexOffset + 2].vertex_index;
+
+            if (i0 < 0 || i1 < 0 || i2 < 0 ||
+                static_cast<size_t>(i0) >= numVertices ||
+                static_cast<size_t>(i1) >= numVertices ||
+                static_cast<size_t>(i2) >= numVertices)
+            {
+                throw std::runtime_error("OBJ has an invalid position index");
+            }
+
+            // 4. Convert local indices to global geometry indices.
+            unsigned int v0 = static_cast<unsigned int>(baseVertex + i0);
+            unsigned int v1 = static_cast<unsigned int>(baseVertex + i1);
+            unsigned int v2 = static_cast<unsigned int>(baseVertex + i2);
+
+            // 5. Skip degenerate triangles.
+            const glm::vec3& p0 = vertices_[v0].position;
+            const glm::vec3& p1 = vertices_[v1].position;
+            const glm::vec3& p2 = vertices_[v2].position;
+
+            glm::vec3 crossProduct =
+                glm::cross(p1 - p0, p2 - p0);
+
+            float area = glm::length(crossProduct);
+
+            if (area >= 1e-12f && std::isfinite(area))
+            {
+                triangles_.push_back({v0, v1, v2});
+            }
+
+            indexOffset += faceSize;
+        }
+    }
+}
+
+void Mesh::populateVertexNeighbors() {
+    for (const auto& tri : triangles_) {
+        unsigned int indices[3] = {tri.v0, tri.v1, tri.v2};
+
+        for (int i = 0; i < 3; i++) {
+            unsigned int vertexInd = indices[i];
+            GeometryVertex& vertex = vertices_[vertexInd];
+
+            // get the other two vertices
+            for (int j = 0; j < 3; j++) {
+                // skip the current index
+                if (i == j) {
+                    continue;
+                }
+                unsigned int neighborInd = indices[j];
+                auto& neighbors = vertex.neighbors;
+                if (std::find(neighbors.begin(), neighbors.end(), neighborInd) == neighbors.end()) {
+                    neighbors.push_back(neighborInd);
+                }
+            }
+        }
+    }
 }
 
 Mesh::~Mesh()

@@ -1,9 +1,34 @@
 #pragma once
 #include <filesystem>
+#include <tiny_obj_loader.h>
 #include <vector>
 #include <glad/gl.h>
 #include "Object.h"
 
+struct GeometryVertex
+{
+    glm::vec3 position;
+    glm::vec3 normal;
+
+    // indices to connecting vertices
+    std::vector<unsigned int> neighbors;
+};
+
+struct Triangle
+{
+    unsigned int v0;
+    unsigned int v1;
+    unsigned int v2;
+};
+
+struct PrincipalCurvature
+{
+    float k1 = 0.0f;
+    float k2 = 0.0f;
+
+    glm::vec3 dir1{0.0f};
+    glm::vec3 dir2{0.0f};
+};
 // One or more OBJ files become one draw call. Material groups and UVs are deferred.
 class Mesh : public Object
 {
@@ -18,6 +43,13 @@ class Mesh : public Object
     void Draw() const override;
 
   private:
+    std::vector<GeometryVertex> vertices_; // list of unique vertices
+    std::vector<Triangle> triangles_; // indexed triangle mesh
+
+    std::vector<PrincipalCurvature> curvatureData_;
+
+    void createIndexedMesh(const tinyobj::ObjReader reader, size_t baseVertex);
+    void populateVertexNeighbors();
     // VAO describes attribute layout; VBO owns interleaved position/normal data.
     // Copying is disabled because two Mesh instances must not own the same handles.
     GLuint vao_ = 0;
