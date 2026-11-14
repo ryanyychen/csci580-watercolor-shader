@@ -27,6 +27,41 @@ Input &input(GLFWwindow *window)
     return *static_cast<Input *>(glfwGetWindowUserPointer(window));
 }
 
+
+Shader * phongShader;
+Shader * watercolorShader;
+
+enum class ShaderType {
+    Phong,
+    Watercolor
+};
+
+ShaderType currentShader = ShaderType::Phong;
+
+void createShaders(const std::filesystem::path &resources) {
+    phongShader = new Shader(resources / "shaders/phong.vert", resources / "shaders/phong.frag");
+    watercolorShader = new Shader(resources / "shaders/watercolor.vert", resources / "shaders/watercolor.frag");
+}
+
+void switchShaders(GLFWwindow * window) {
+    auto& state = input(window);
+    auto& meshes = state.world->objects;
+    switch(currentShader) {
+        case(ShaderType::Phong):
+            currentShader = ShaderType::Watercolor;
+            for (auto& obj : meshes) {
+                obj->material_shader = watercolorShader;
+            }
+            break;
+        case(ShaderType::Watercolor):
+            currentShader = ShaderType::Phong;
+            for (auto& obj : meshes) {
+                obj->material_shader = phongShader;
+            }
+            break;
+    }
+}
+
 void key(GLFWwindow *window, int k, int, int action, int)
 {
     // Handle toggles once per press, instead of repeating while a key is held.
@@ -40,6 +75,8 @@ void key(GLFWwindow *window, int k, int, int action, int)
         input(window).world->show_normals = !input(window).world->show_normals;
     if (k == GLFW_KEY_S)
         input(window).save_screenshot = true;
+    if (k == GLFW_KEY_SPACE)
+        switchShaders(window);
 }
 
 void mouseButton(GLFWwindow *window, int button, int action, int)
@@ -66,16 +103,17 @@ void scroll(GLFWwindow *window, double, double y)
     input(window).world->camera.Zoom(static_cast<float>(y));
 }
 
+
 void run(GLFWwindow *window, const std::filesystem::path &resources,
          const std::vector<std::filesystem::path> &meshPaths, bool smokeTest,
          const std::filesystem::path &outputPath)
 {
     // All GPU resources are created after main() has made an OpenGL context current.
     // Declare the shader before the world so objects are destroyed before their shader.
-    Shader shader(resources / "shaders/watercolor.vert", resources / "shaders/watercolor.frag");
+    createShaders(resources);
     Render_World world;
     auto mesh = std::make_unique<Mesh>(meshPaths);
-    mesh->material_shader = &shader;
+    mesh->material_shader = phongShader;
 
     // Scene setup: object material, world lights, and camera.
     mesh->material.color_ambient = glm::vec3(0.02f, 0.02f, 0.8f);
