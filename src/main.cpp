@@ -1,0 +1,235 @@
+#include "renderer/Render_World.h"
+#include "renderer/Image_Output.h"
+#include "renderer/Mesh.h"
+#include "renderer/Shader.h"
+#include <GLFW/glfw3.h>
+#include <filesystem>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace
+{
+// GLFW callbacks recover this per-window state through the window's user pointer.
+// The world owns the scene; input state only keeps a reference to it.
+struct Input
+{
+    Render_World *world = nullptr;
+    bool dragging = false;
+    bool save_screenshot = false;
+    double lastX = 0, lastY = 0;
+};
+
+Input &input(GLFWwindow *window)
+{
+    return *static_cast<Input *>(glfwGetWindowUserPointer(window));
+}
+
+void key(GLFWwindow *window, int k, int, int action, int)
+{
+    // Handle toggles once per press, instead of repeating while a key is held.
+    if (action != GLFW_PRESS)
+        return;
+    if (k == GLFW_KEY_ESCAPE)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    if (k == GLFW_KEY_R)
+        input(window).world->camera.Reset();
+    if (k == GLFW_KEY_N)
+        input(window).world->show_normals = !input(window).world->show_normals;
+    if (k == GLFW_KEY_S)
+        input(window).save_screenshot = true;
+}
+
+void mouseButton(GLFWwindow *window, int button, int action, int)
+{
+    if (button != GLFW_MOUSE_BUTTON_LEFT)
+        return;
+    input(window).dragging = action == GLFW_PRESS;
+    // Start each drag at the current cursor position to avoid a camera jump.
+    glfwGetCursorPos(window, &input(window).lastX, &input(window).lastY);
+}
+
+void cursor(GLFWwindow *window, double x, double y)
+{
+    auto &state = input(window);
+    if (state.dragging)
+        state.world->camera.Orbit(static_cast<float>(x - state.lastX),
+                                  static_cast<float>(y - state.lastY));
+    state.lastX = x;
+    state.lastY = y;
+}
+
+void scroll(GLFWwindow *window, double, double y)
+{
+    input(window).world->camera.Zoom(static_cast<float>(y));
+}
+
+void run(GLFWwindow *window, const std::filesystem::path &resources,
+         const std::vector<std::filesystem::path> &meshPaths, bool smokeTest,
+         const std::filesystem::path &outputPath)
+{
+    // All GPU resources are created after main() has made an OpenGL context current.
+    // Declare the shader before the world so objects are destroyed before their shader.
+    Shader shader(resources / "shaders/phong.vert", resources / "shaders/phong.frag");
+    Render_World world;
+    auto mesh = std::make_unique<Mesh>(meshPaths);
+    mesh->material_shader = &shader;
+
+    // Scene setup: object material, world lights, and camera.
+    mesh->material.color_ambient = glm::vec3(0.02f, 0.02f, 0.8f);
+    mesh->material.color_diffuse = glm::vec3(0.8f, 0.02f, 0.02f);
+    mesh->material.color_specular = glm::vec3(1.0f);
+    mesh->material.specular_power = 64.0f;
+
+    world.objects.push_back(std::move(mesh));
+    world.lights.front().position = glm::vec3(3.0f, 4.0f, 4.0f);
+    world.lights.front().color = glm::vec3(0.3f);
+    world.ambient_intensity = 0.12f;
+
+    // Register callbacks after their input state and scene are ready.
+    Input state;
+    state.world = &world;
+    glfwSetWindowUserPointer(window, &state);
+    glfwSetKeyCallback(window, key);
+    glfwSetMouseButtonCallback(window, mouseButton);
+    glfwSetCursorPosCallback(window, cursor);
+    glfwSetScrollCallback(window, scroll);
+
+    // Keep the nearest fragment at each pixel, regardless of triangle draw order.
+    glEnable(GL_DEPTH_TEST);
+    int frames = 0;
+    while (!glfwWindowShouldClose(window))
+    {
+        glfwPollEvents();
+        int width, height;
+
+        // Use framebuffer pixels rather than logical window size for high-DPI displays.
+        glfwGetFramebufferSize(window, &width, &height);
+        if (width == 0 || height == 0)
+        {
+            glfwWaitEvents();
+            continue;
+        }
+        
+        // Render first, then read the back buffer for screenshots before presenting it.
+        world.Render(width, height);
+        if (!outputPath.empty() && frames == 0)
+            saveScreenshot(world.camera, outputPath);
+        
+        if (state.save_screenshot)
+        {
+            // An interactive file error should leave the viewer usable.
+            try
+            {
+                saveScreenshot(world.camera, "output.ppm");
+            }
+            catch (const std::exception &error)
+            {
+                std::cerr << "Screenshot failed: " << error.what() << '\n';
+            }
+            state.save_screenshot = false;
+        }
+
+        if (smokeTest)
+        {
+            // Wait for GPU work so the short validation run observes rendering errors.
+            glFinish();
+            if (glGetError() != GL_NO_ERROR)
+                throw std::runtime_error("OpenGL smoke test failed");
+        }
+
+        glfwSwapBuffers(window);
+        ++frames;
+
+        if ((smokeTest && frames == 3) || (!smokeTest && !outputPath.empty()))
+            break;
+    }
+    // Mesh and shader destruct before their OpenGL context is destroyed.
+}
+} // namespace
+
+int main(int argc, char **argv)
+{
+    GLFWwindow *window = nullptr;
+    try
+    {
+        // Root executable -> existing shaders/ and assets/ folders beside it.
+        // Explicit model and output paths are resolved from the working directory.
+        std::filesystem::path resources = std::filesystem::absolute(argv[0]).parent_path();
+        std::vector<std::filesystem::path> meshPaths;
+        std::filesystem::path outputPath;
+        bool smokeTest = false;
+        for (int i = 1; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if (arg == "--help")
+            {
+                std::cout
+                    << "Usage: watercolor [part.obj ...] [--resources directory] [--output image.ppm] [--smoke-test]\n"
+                       "Left drag: orbit | Wheel: zoom | R: reset | N: normals | S: save output.ppm | Esc: quit\n"
+                       "--output renders one frame to P3 PPM and exits; combined with --smoke-test renders three frames.\n";
+                return 0;
+            }
+            if (arg == "--resources" && i + 1 < argc)
+                resources = std::filesystem::absolute(argv[++i]);
+            else if (arg == "--output" && i + 1 < argc)
+                outputPath = std::filesystem::absolute(argv[++i]);
+            else if (arg == "--smoke-test")
+                smokeTest = true;
+            else if (arg.rfind("--", 0) == 0)
+                throw std::runtime_error("Unknown or incomplete option: " + arg);
+            else
+                meshPaths.push_back(std::filesystem::absolute(arg));
+        }
+        if (!outputPath.empty() && outputPath.extension() != ".ppm")
+            throw std::runtime_error("--output requires a .ppm filename (P3 format)");
+        if (meshPaths.empty())
+            meshPaths.push_back(resources / "assets/models/octahedron.obj");
+        glfwSetErrorCallback([](int code, const char *message)
+                             { std::cerr << "GLFW " << code << ": " << message << '\n'; });
+        if (!glfwInit())
+            throw std::runtime_error("GLFW initialization failed");
+        
+        // Core profile excludes legacy fixed-function drawing; GLSL handles shading.
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+#ifdef __APPLE__
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
+
+        if (smokeTest || !outputPath.empty())
+            glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        window = glfwCreateWindow(1100, 800, "Watercolor | Phong | N: normals | R: reset | S: save",
+                                  nullptr, nullptr);
+        if (!window)
+            throw std::runtime_error("Cannot create an OpenGL 3.3 window");
+        glfwMakeContextCurrent(window);
+
+        // Entry points can only be loaded after a context is current on this thread.
+        if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress)))
+            throw std::runtime_error("GLAD initialization failed");
+        glfwSwapInterval(smokeTest || !outputPath.empty() ? 0 : 1);
+        // Match the terrain assignment's startup diagnostics so the selected
+        // hardware or software renderer is visible, including inside WSL.
+        std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << '\n';
+        std::cout << "OpenGL Renderer: " << glGetString(GL_RENDERER) << '\n';
+        std::cout << "Shading Language Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION)
+                  << '\n';
+        run(window, resources, meshPaths, smokeTest, outputPath);
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 0;
+    }
+    catch (const std::exception &error)
+    {
+        // Report file/shader/context failures consistently and release window resources.
+        std::cerr << "Error: " << error.what() << '\n';
+        if (window)
+            glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+}

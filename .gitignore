@@ -1,0 +1,15 @@
+/build-scons/
+/watercolor
+/watercolor.exe
+/.venv/
+/.vs/
+/.idea/
+*.user
+*.suo
+.DS_Store
+/output.ppm
+/screenshots/
+/.deps/
+.sconsign.dblite
+.sconsign.dblite.*
+__pycache__/

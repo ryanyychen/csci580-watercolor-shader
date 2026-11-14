@@ -1,0 +1,611 @@
+# Original material properties; texture images were not in the source ZIP.
+
+# Source: fer05_body_hi.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_body_hi__CARBFBD
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/CarbFer_DIFF.jpg
+map_Ns F:/3D/F1_DEV/FerrariF2007/Textures/CarbFer_roughness.jpg
+map_refl F:/3D/F1_DEV/FerrariF2007/Textures/CarbFer_metallic.jpg
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/CarbFer_normal.png
+
+newmtl fer05_body_hi__COCKWFER
+Ns 100.000015
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/mestransform/cockwfer.dds
+map_d F:/3D/F1_DEV/FerrariF2007/mestransform/cockwfer.dds
+
+newmtl fer05_body_hi__F2K7_COCKPIT
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/F2007_CPIT.png
+map_Bump F:/3D/F1_DEV/FerrariF2007/Textures/F2007_CPITB.png
+
+newmtl fer05_body_hi__Ferrari2007_Left
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Left_NT_Diff.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Side_Spec.png
+map_Ns F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Side_Roughness.png
+map_refl F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Side_Metallic.png
+
+newmtl fer05_body_hi__Ferrari2007_Right
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Right_NT_Diff.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Side_Spec.png
+map_Ns F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Side_Roughness.png
+map_refl F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Side_Metallic.png
+
+newmtl fer05_body_hi__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/FerrariF2007/Textures/Ferrari2007_Top_Metallic.png
+
+newmtl fer05_body_hi__MIRROR
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Kd 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+
+# Source: fer05_fwing.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_fwing__CARBFBD
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_DIFF.jpg
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_roughness.jpg
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_metallic.jpg
+map_Bump -bm 1.000000 F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_normal.png
+
+newmtl fer05_fwing__Ferrari2007_Left
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Left_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Metallic.png
+
+newmtl fer05_fwing__Ferrari2007_Right
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Right_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Metallic.png
+
+newmtl fer05_fwing__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Metallic.png
+
+# Source: fer05_rwing.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_rwing__CARBFBD
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_DIFF.jpg
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_roughness.jpg
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_metallic.jpg
+map_Bump -bm 1.000000 F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/CarbFer_normal.png
+
+newmtl fer05_rwing__Ferrari2007_Left
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Left_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Metallic.png
+
+newmtl fer05_rwing__Ferrari2007_Right
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Right_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Side_Metallic.png
+
+newmtl fer05_rwing__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Metallic.png
+
+# Source: fer05_suspa_brake_fl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_brake_fl__BRAKE
+Ns 461.084167
+Ka 0.595455 0.595455 0.595455
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Fer_Brake_Diff.jpg
+
+# Source: fer05_suspa_brake_fr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_brake_fr__BRAKE
+Ns 461.084167
+Ka 0.595455 0.595455 0.595455
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Fer_Brake_Diff.jpg
+
+# Source: fer05_suspa_brake_rl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_brake_rl__BRAKE
+Ns 461.084167
+Ka 0.595455 0.595455 0.595455
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Fer_Brake_Diff.jpg
+
+# Source: fer05_suspa_brake_rr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_brake_rr__BRAKE
+Ns 461.084167
+Ka 0.595455 0.595455 0.595455
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Fer_Brake_Diff.jpg
+
+# Source: fer05_suspa_cov_fl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_cov_fl__FERCOVLF
+Ns 608.399963
+Ka 0.100000 0.100000 0.100000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/FERCOVLF.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovf_s.png
+
+# Source: fer05_suspa_cov_fr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_cov_fr__FERCOVRF
+Ns 608.399963
+Ka 0.100000 0.100000 0.100000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovrf.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovf_s.png
+
+# Source: fer05_suspa_cov_rl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_cov_rl__FERCOVR
+Ns 608.399963
+Ka 0.100000 0.100000 0.100000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovr.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovr_s.png
+
+# Source: fer05_suspa_cov_rr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_cov_rr__FERCOVR
+Ns 608.399963
+Ka 0.100000 0.100000 0.100000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovr.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/fercovr_s.png
+
+# Source: fer05_suspa_fl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_fl__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Metallic.png
+
+# Source: fer05_suspa_fr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_fr__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Metallic.png
+
+# Source: fer05_suspa_rl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_rl__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Metallic.png
+
+# Source: fer05_suspa_rr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_suspa_rr__Ferrari2007_Top
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_NT_Diff.png
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Spec.png
+map_Ns F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Roughness.png
+map_refl F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/Textures/Ferrari2007_Top_Metallic.png
+
+# Source: fer05_swheel.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007.blend'
+# www.blender.org
+
+newmtl fer05_swheel__FERWH
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwh.dds
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwh_s.dds
+map_Bump F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwh_b.dds
+
+newmtl fer05_swheel__FERWHBK
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhbk.dds
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhbk_s.dds
+map_Bump F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhbk_b.dds
+
+newmtl fer05_swheel__FERWHBTN
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhbtn.dds
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhbtn_s.dds
+map_Bump F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhbtn_b.dds
+
+newmtl fer05_swheel__FERWHHAND
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhhand.dds
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhhand_s.dds
+
+newmtl fer05_swheel__FERWHMIX
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhmix.dds
+map_Ks F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhmix_s.dds
+map_Bump F:/3D/F1_DEV/CGTRADER_CONTENT/CGTrader_Upload/Formula1/Ferrari 2007 F2007/mestransform/ferwhmix_b.dds
+
+newmtl fer05_swheel__LCDBK
+Ns 752.333557
+Ka 0.120846 0.120846 0.120846
+Kd 0.000000 0.000000 0.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+
+# Source: tire_fl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007 - 副本.blend'
+# www.blender.org
+
+newmtl tire_fl__08BRID
+Ns 400.983521
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/tirewall.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_s.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_b.png
+
+newmtl tire_fl__RIM_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RIM_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RIM_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_fl__RING_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RING_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RING_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_fl__TREADBS
+Ns 422.499969
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/08BRID.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_B.png
+
+# Source: tire_fr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007 - 副本.blend'
+# www.blender.org
+
+newmtl tire_fr__08BRID
+Ns 400.983521
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/tirewall.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_s.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_b.png
+
+newmtl tire_fr__RIM_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RIM_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RIM_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_fr__RING_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RING_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RING_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_fr__TREADBS
+Ns 422.499969
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/08BRID.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_B.png
+
+# Source: tire_rl.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007 - 副本.blend'
+# www.blender.org
+
+newmtl tire_rl__08BRID
+Ns 400.983521
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/tirewall.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_s.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_b.png
+
+newmtl tire_rl__RIM_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RIM_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RIM_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_rl__RING_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RING_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RING_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_rl__TREADBS
+Ns 422.499969
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/08BRID.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_B.png
+
+# Source: tire_rr.mtl
+# Blender 5.0.0 MTL File: 'FerrariF2007 - 副本.blend'
+# www.blender.org
+
+newmtl tire_rr__08BRID
+Ns 400.983521
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/tirewall.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_s.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/tirewall_b.png
+
+newmtl tire_rr__RIM_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RIM_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RIM_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_rr__RING_FER
+Ns 722.500000
+Ka 0.750000 0.750000 0.750000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/RING_FER.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/RING_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/RING_B.png
+
+newmtl tire_rr__TREADBS
+Ns 422.499969
+Ka 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd F:/3D/F1_DEV/FerrariF2007/Textures/08BRID.png
+map_Ks F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_S.png
+map_Bump -bm 1.000000 F:/3D/F1_DEV/FerrariF2007/Textures/08BRID_B.png
