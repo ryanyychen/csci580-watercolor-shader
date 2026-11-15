@@ -1,5 +1,6 @@
 #include "KubelkaMunk.h"
 #include <cmath>
+#include <stdexcept>
 
 const std::vector<NamedPigment> &curtisPalette()
 {
@@ -21,6 +22,47 @@ const std::vector<NamedPigment> &curtisPalette()
     return palette;
 }
 
+Pigment pigmentFromName(const std::string &name)
+{
+    for (const NamedPigment &entry : curtisPalette())
+        if (entry.name == name)
+            return entry.pigment;
+    throw std::invalid_argument("Unknown pigment: " + name);
+}
+
+Pigment pigmentFromColors(const glm::vec3 &onWhite, const glm::vec3 &onBlack)
+{
+    // Computes K and S from Rw (color over white) and Rb (color over black), for each color channel
+    // a = (Rw + (Rb - Rw + 1) / Rb) / 2
+    // b = sqrt(a^2 - 1)
+    // S = arccoth((b^2 - (a - Rw)(a - 1)) / (b (1 - Rw))) / b
+    // K = S (a - 1)
+    Pigment pigment;
+    for (int ch = 0; ch < 3; ch++)
+    {
+        float Rw = onWhite[ch];
+        float Rb = onBlack[ch];
+        if (!(0.0f < Rb && Rb < Rw && Rw < 1.0f))
+            throw std::invalid_argument("pigmentFromColors needs 0 < onBlack < onWhite < 1");
+        float a = 0.5f * (Rw + (Rb - Rw + 1.0f) / Rb);
+        float b = std::sqrt(a * a - 1.0f);
+        float x = (b * b - (a - Rw) * (a - 1.0f)) / (b * (1.0f - Rw));
+        float arccothX = 0.5f * std::log((x + 1.0f) / (x - 1.0f));
+        pigment.S[ch] = arccothX / b;
+        pigment.K[ch] = pigment.S[ch] * (a - 1.0f);
+    }
+    return pigment;
+}
+
+Pigment pigmentFromRGB(const glm::vec3 &color, float opacity)
+{
+    // onWhite = color, onBlack = color * opacity
+    // Values are clamped to 0.01 to 0.99 so that 0 < onBlack < onWhite < 1 always holds
+    glm::vec3 onWhite = glm::clamp(color, 0.01f, 0.99f);
+    glm::vec3 onBlack = onWhite * glm::clamp(opacity, 0.01f, 0.99f);
+    return pigmentFromColors(onWhite, onBlack);
+}
+
 ReflectTransmit computeLayer(const Layer &layer)
 {
     // Kubelka-Munk solution for one layer, computed separately for each color channel.
@@ -35,7 +77,9 @@ ReflectTransmit computeLayer(const Layer &layer)
         float b = std::sqrt(a * a - 1.0f);
         float bSx = b * S * layer.thickness;
         float c = a * std::sinh(bSx) + b * std::cosh(bSx);
-        result.R[ch] = std::sinh(bSx) / c;
+        // R = sinh(bSx) / c, rewritten with tanh because sinh and cosh overflow for thick layers
+        float t = std::tanh(bSx);
+        result.R[ch] = t / (a * t + b);
         result.T[ch] = b / c;
     }
     return result;
@@ -53,7 +97,28 @@ ReflectTransmit stackLayers(const ReflectTransmit &top, const ReflectTransmit &b
     return result;
 }
 
-glm::vec3 composite(const std::vector<Layer> &layers, const glm::vec3 &paperColor)
+Layer layerFromMix(const std::vector<Layer> &parts)
+{
+    // K and S are averages weighted by each part's thickness, and thickness is the sum of the parts
+    if (parts.empty())
+        throw std::invalid_argument("layerFromMix needs at least one part");
+    Layer mixed = {{glm::vec3(0.0f), glm::vec3(0.0f)}, 0.0f};
+    for (const Layer &part : parts)
+    {
+        mixed.pigment.K += part.pigment.K * part.thickness;
+        mixed.pigment.S += part.pigment.S * part.thickness;
+        mixed.thickness += part.thickness;
+    }
+
+    if (mixed.thickness <= 0.0f)
+        return {parts[0].pigment, 0.0f};
+
+    mixed.pigment.K /= mixed.thickness;
+    mixed.pigment.S /= mixed.thickness;
+    return mixed;
+}
+
+glm::vec3 colorFromLayers(const std::vector<Layer> &layers, const glm::vec3 &paperColor)
 {
     // Start with bare paper: it reflects its own color and lets no light through
     ReflectTransmit stack;

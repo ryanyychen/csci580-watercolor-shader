@@ -19,7 +19,6 @@ from SCons.Script import (
 
 Help("""Build: python -m SCons [-j4] [mode=debug|release] [toolchain=mingw|msvc]
 Check: python -m SCons check
-KM demo: python -m SCons km-demo (writes test images to screenshots/km/)
 Clean: python -m SCons -c (use the same mode/toolchain/deps arguments as the build)
 Dependencies: python scripts/setup_dependencies.py; override with deps=directory
 Output: ./watercolor[.exe] (intermediate files stay under build-scons/)
@@ -177,20 +176,3 @@ def run_checks(target, source, env):
 check = Alias("check", checks, Action(run_checks, "Checking camera and PPM output"))
 # Rerun assertions even if the test executable itself did not need recompiling.
 AlwaysBuild(check)
-
-# Kubelka-Munk test images are checked by eye; no window is created.
-km_demo_sources = [
-    "tests/km_demo.cpp",
-    "src/renderer/KubelkaMunk.cpp",
-    "src/renderer/Camera.cpp",
-    "src/renderer/Image_Output.cpp",
-]
-km_demo = env.Program(str(build / "km_demo"), objects(km_demo_sources, "km_demo") + support)
-
-
-def run_km_demo(target, source, env):
-    subprocess.run([str(Path(str(km_demo[0])).resolve())], cwd=Dir("#").abspath, check=True)
-
-
-km_demo_alias = Alias("km-demo", km_demo, Action(run_km_demo, "Writing KM test images"))
-AlwaysBuild(km_demo_alias)

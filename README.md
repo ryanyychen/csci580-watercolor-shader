@@ -40,8 +40,22 @@ main.cpp: see --sim and skip the window (the simulation runs on the CPU)
 ```
 
 The simulation follows Curtis et al. (1997) on a 2D grid of paper cells. So far it
-only sets up the paper and the brush stroke; water flow, pigment movement, drying,
-and Kubelka-Munk colors are next.
+only sets up the paper and the brush stroke; water flow, pigment movement, and drying
+are next, and its colors will then come from the Kubelka-Munk module.
+
+Both watercolor methods can turn pigment amounts into colors with
+[src/renderer/KubelkaMunk.h](src/renderer/KubelkaMunk.h), which follows the
+Kubelka-Munk model in Curtis et al. (1997). A pigment comes from the Curtis palette
+or from an RGB color, and layers are listed from bottom (painted first) to top:
+
+```cpp
+Pigment blue = pigmentFromName("French Ultramarine");
+Pigment yellow = pigmentFromRGB(glm::vec3(0.9f, 0.8f, 0.2f));
+glm::vec3 color = colorFromLayers({{blue, 0.5f}, {yellow, 0.3f}}, paperColor);
+```
+
+`layerFromMix` mixes several pigments into one layer, as in wet-in-wet painting.
+Neither the simulation nor the watercolor shader uses this module yet.
 
 | File | What it controls |
 | --- | --- |
@@ -56,6 +70,7 @@ and Kubelka-Munk colors are next.
 | [shaders/phong.frag](shaders/phong.frag) | Lighting calculations and display gamma encoding; the starting point for stylistic watercolor effects. |
 | [src/renderer/Image_Output.cpp](src/renderer/Image_Output.cpp) | Write the rendered framebuffer to a P3 PPM image. |
 | [src/renderer/WatercolorSim.cpp](src/renderer/WatercolorSim.cpp) | Physical watercolor simulation: paper grid, wet area, water, and pigment. |
+| [src/renderer/KubelkaMunk.cpp](src/renderer/KubelkaMunk.cpp) | Kubelka-Munk pigment colors: turns layers of pigment over paper into the final RGB color. |
 
 For colors, edit `mesh->material` in `src/main.cpp`: `color_diffuse` is the main
 surface color, `color_ambient` affects the ambient contribution, `color_specular`
