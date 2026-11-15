@@ -3,6 +3,7 @@
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
 #include "renderer/TextureGenerator.h"
+#include "renderer/WatercolorSim.h"
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <iostream>
@@ -205,15 +206,17 @@ int main(int argc, char **argv)
         std::vector<std::filesystem::path> meshPaths;
         std::filesystem::path outputPath;
         bool smokeTest = false;
+        bool runSim = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string arg = argv[i];
             if (arg == "--help")
             {
                 std::cout
-                    << "Usage: watercolor [part.obj ...] [--resources directory] [--output image.ppm] [--smoke-test]\n"
+                    << "Usage: watercolor [part.obj ...] [--resources directory] [--output image.ppm] [--smoke-test] [--sim]\n"
                        "Left drag: orbit | Wheel: zoom | R: reset | N: normals | S: save output.ppm | Esc: quit\n"
-                       "--output renders one frame to P3 PPM and exits; combined with --smoke-test renders three frames.\n";
+                       "--output renders one frame to P3 PPM and exits; combined with --smoke-test renders three frames.\n"
+                       "--sim runs the watercolor simulation and saves screenshots/sim/step000.ppm.\n";
                 return 0;
             }
             if (arg == "--resources" && i + 1 < argc)
@@ -222,6 +225,8 @@ int main(int argc, char **argv)
                 outputPath = std::filesystem::absolute(argv[++i]);
             else if (arg == "--smoke-test")
                 smokeTest = true;
+            else if (arg == "--sim")
+                runSim = true;
             else if (arg.rfind("--", 0) == 0)
                 throw std::runtime_error("Unknown or incomplete option: " + arg);
             else
@@ -229,6 +234,12 @@ int main(int argc, char **argv)
         }
         if (!outputPath.empty() && outputPath.extension() != ".ppm")
             throw std::runtime_error("--output requires a .ppm filename (P3 format)");
+        // simulation runs on the CPU and no window.
+        if (runSim)
+        {
+            runWatercolorSimDemo();
+            return 0;
+        }
         if (meshPaths.empty())
             meshPaths.push_back(resources / "assets/models/octahedron.obj");
         glfwSetErrorCallback([](int code, const char *message)
