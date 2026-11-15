@@ -30,6 +30,19 @@ their geometry before centering/scaling, preserving their relative positions.
 With no path, the viewer loads `assets/models/octahedron.obj`. All imported parts
 currently share one material; OBJ/MTL colors and textures are not applied.
 
+Running `./watercolor --sim` runs the physical simulation instead of the viewer:
+
+```text
+main.cpp: see --sim and skip the window (the simulation runs on the CPU)
+  -> WatercolorSim.cpp: make the paper height field from Perlin noise + random grain
+  -> WatercolorSim.cpp: paint one wet circle of water and pigment
+  -> Image_Output.cpp: save screenshots/sim/step000.ppm
+```
+
+The simulation follows Curtis et al. (1997) on a 2D grid of paper cells. So far it
+only sets up the paper and the brush stroke; water flow, pigment movement, drying,
+and Kubelka-Munk colors are next.
+
 | File | What it controls |
 | --- | --- |
 | [SConstruct](SConstruct) | Compilation, dependencies, debug/release settings, and the root executable. |
@@ -42,6 +55,7 @@ currently share one material; OBJ/MTL colors and textures are not applied.
 | [shaders/phong.vert](shaders/phong.vert) | Position transforms and inverse-transpose normal transformation. |
 | [shaders/phong.frag](shaders/phong.frag) | Lighting calculations and display gamma encoding; the starting point for stylistic watercolor effects. |
 | [src/renderer/Image_Output.cpp](src/renderer/Image_Output.cpp) | Write the rendered framebuffer to a P3 PPM image. |
+| [src/renderer/WatercolorSim.cpp](src/renderer/WatercolorSim.cpp) | Physical watercolor simulation: paper grid, wet area, water, and pigment. |
 
 For colors, edit `mesh->material` in `src/main.cpp`: `color_diffuse` is the main
 surface color, `color_ambient` affects the ambient contribution, `color_specular`
@@ -81,6 +95,9 @@ scons -j4
 
 # Render one image and exit
 ./watercolor "path/to/model.obj" --output screenshots/render.ppm
+
+# Run the physical simulation and save screenshots/sim/step000.ppm (no window)
+./watercolor --sim
 ```
 
 The executable is at the repository root; intermediate files stay in
@@ -96,6 +113,7 @@ For MSVC, use Developer PowerShell and add `toolchain=msvc` to the build command
 | R | Reset camera |
 | N | Toggle normal visualization |
 | S | Save `output.ppm` in the working directory |
+| Space | Switch between the Phong and watercolor shaders |
 | Esc | Exit |
 
 Other commands: `scons check` checks camera math and PPM output,
