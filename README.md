@@ -146,6 +146,8 @@ graphics check; `--help` lists the command-line options.
 
 ## Research and similar project
 
+- **Rusinkiewicz (2004)** — [Estimating Curvatures and Their Derivatives on Triangle Meshes](https://pixl.cs.princeton.edu/pubs/Rusinkiewicz_2004_ECA/curvpaper.pdf).
+  Used to estimate principal curvatures and principal curvature directions on the mesh.
 - **Lum and Ma (2001)** — [Non-Photorealistic Rendering using Watercolor Inspired
   Textures and Illumination](https://escholarship.org/uc/item/2g48f8kn).
   Main reference for lighting-driven, texture-based stylistic watercolor.
