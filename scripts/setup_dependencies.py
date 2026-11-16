@@ -10,6 +10,7 @@ DEPENDENCIES = {
     "glm": ("https://github.com/g-truc/glm.git", "1.0.1"),
     "glad": ("https://github.com/Dav1dde/glad.git", "v2.0.8"),
     "tinyobjloader": ("https://github.com/tinyobjloader/tinyobjloader.git", "v2.0.0rc13"),
+    "eigen": ("https://gitlab.com/libeigen/eigen.git", "3.4.0"),
 }
 
 

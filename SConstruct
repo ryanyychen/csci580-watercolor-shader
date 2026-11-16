@@ -39,7 +39,7 @@ build = Path("build-scons") / toolchain / mode
 deps = Path(ARGUMENTS.get("deps", ".deps")).resolve()
 # One signature database tracks the shared root executable across configurations.
 SConsignFile("build-scons/.sconsign.dblite")
-for name in ("glfw", "glm", "glad", "tinyobjloader"):
+for name in ("glfw", "glm", "glad", "tinyobjloader", "eigen"):
     if not (deps / (name + "-src")).is_dir():
         print("Missing dependencies. Run: python scripts/setup_dependencies.py")
         Exit(1)
@@ -61,6 +61,7 @@ env.Append(
     CPPDEFINES=["GLFW_INCLUDE_NONE"],
     CPPPATH=[
         "#src",
+        str(deps / "eigen-src"),
         str(deps / "glm-src"),
         str(deps / "tinyobjloader-src"),
         str(deps / "glfw-src/include"),

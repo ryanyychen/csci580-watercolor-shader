@@ -13,14 +13,16 @@ image-space physical simulation is still pending.
 Running `./watercolor "path/to/model.obj"` follows this path:
 
 ```text
-main.cpp: parse model path and create the GLFW/OpenGL context
-  -> Shader.cpp: read and compile phong.vert + phong.frag
-  -> Mesh.cpp: read OBJ -> triangulate -> prepare normals -> center/scale
-               -> upload positions/normals into a GPU vertex buffer
-  -> Render_World.cpp: pass camera, object material, and lights to the shader
-  -> phong.vert: transform vertices and normals into world/clip space
-  -> OpenGL: rasterize triangles and interpolate attributes
+main.cpp: parse args, initialize GLFW, create the OpenGL context, and load one or more OBJ files
+  -> Shader.cpp: compile the active Phong, curvature, and watercolor shaders
+  -> Mesh.cpp: read OBJ -> triangulate -> compute normals and principal curvature -> normalize bounds
+               -> upload vertices and diagnostic buffers into GPU buffers
+  -> Render_World.cpp: pass camera, object material, lights, and the noise texture to the active shader
+  -> phong.vert / curvature.vert / watercolor.vert: transform positions and normals into world/clip space
+  -> OpenGL: rasterize triangles and interpolate per-vertex attributes
   -> phong.frag: calculate ambient + diffuse + specular lighting
+  -> curvature.frag: color mesh regions by curvature magnitude
+  -> watercolor.frag: sample the generated Perlin-noise paper texture for tonal watercolor shading
   -> OpenGL: use depth testing to determine visible fragments in the framebuffer
   -> main.cpp: present the rendered frame in the window
 ```
@@ -66,8 +68,13 @@ Neither the simulation nor the watercolor shader uses this module yet.
 | [src/renderer/Camera.cpp](src/renderer/Camera.cpp) | View/projection matrices, orbit, zoom, and framebuffer readback. |
 | [src/renderer/Render_World.cpp](src/renderer/Render_World.cpp) | Per-frame drawing and passing scene/material values to shader uniforms. |
 | [src/renderer/Shader.cpp](src/renderer/Shader.cpp) | GLSL compilation/linking and uniform upload helpers. |
-| [shaders/phong.vert](shaders/phong.vert) | Position transforms and inverse-transpose normal transformation. |
-| [shaders/phong.frag](shaders/phong.frag) | Lighting calculations and display gamma encoding; the starting point for stylistic watercolor effects. |
+| [src/renderer/TextureGenerator.cpp](src/renderer/TextureGenerator.cpp) | Generates the Perlin-noise texture used by the watercolor shading pass. |
+| [shaders/phong.vert](shaders/phong.vert) | Standard model/view/projection transform plus inverse-transpose normal conversion. |
+| [shaders/phong.frag](shaders/phong.frag) | Ambient, diffuse, and specular Phong lighting. |
+| [shaders/curvature.vert](shaders/curvature.vert) | Passes curvature values through the pipeline for diagnostic visualization. |
+| [shaders/curvature.frag](shaders/curvature.frag) | Maps curvature magnitude to a color for the curvature visualization mode. |
+| [shaders/watercolor.vert](shaders/watercolor.vert) | Emits object-space noise coordinates alongside world-space position and normal. |
+| [shaders/watercolor.frag](shaders/watercolor.frag) | Samples the noise texture to produce a paper-like watercolor tone. |
 | [src/renderer/Image_Output.cpp](src/renderer/Image_Output.cpp) | Write the rendered framebuffer to a P3 PPM image. |
 | [src/renderer/WatercolorSim.cpp](src/renderer/WatercolorSim.cpp) | Physical watercolor simulation: paper grid, wet area, water, and pigment. |
 | [src/renderer/KubelkaMunk.cpp](src/renderer/KubelkaMunk.cpp) | Kubelka-Munk pigment colors: turns layers of pigment over paper into the final RGB color. |
@@ -98,7 +105,7 @@ python -m pip install -r requirements-build.txt
 python scripts/setup_dependencies.py
 ```
 
-The setup script fetches GLFW, GLAD, GLM, and tinyobjloader into `.deps/`.
+The setup script fetches GLFW, GLAD, GLM, tinyobjloader, and Eigen into `.deps/`.
 On Linux, the build links against the system GLFW. WSL needs a graphical session,
 such as WSLg, to display the viewer.
 
@@ -127,8 +134,9 @@ For MSVC, use Developer PowerShell and add `toolchain=msvc` to the build command
 | Left drag / mouse wheel | Orbit / zoom |
 | R | Reset camera |
 | N | Toggle normal visualization |
+| C | Toggle curvature/normal direction visualization |
 | S | Save `output.ppm` in the working directory |
-| Space | Switch between the Phong and watercolor shaders |
+| Space | Switch between shaders |
 | Esc | Exit |
 
 Other commands: `scons check` checks camera math and PPM output,

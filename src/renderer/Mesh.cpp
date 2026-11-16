@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include <Eigen/Dense>
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
@@ -16,6 +17,10 @@ struct Vertex
 {
     glm::vec3 position;
     glm::vec3 normal;
+
+    // curvature values
+    float k1;
+    float k2;
 
 };
 
@@ -41,6 +46,7 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
         throw std::runtime_error("Expected at least one OBJ file");
 
     std::vector<Vertex> vertices; // expanded vertex data for rendering
+    std::vector<unsigned int> sourceVertexIndices;
     // Append parts in their original coordinates, then fit the combined bounds.
     // Centering individual files would stack wheels, wings, and body at the origin.
     for (const auto &path : paths)
@@ -105,7 +111,8 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
                         if (length > 1e-12f && std::isfinite(length))
                             normal = supplied / length;
                     }
-                    vertices.push_back({p[i], normal});
+                    vertices.push_back({p[i], normal, 0.0f, 0.0f});
+                    sourceVertexIndices.push_back(static_cast<unsigned int>(baseVertex + indices[i].vertex_index));
                 }
             }
         }
@@ -140,7 +147,15 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
         v.position = (v.position - center) * (2.0f / span);
 
     populateVertexNeighbors();
-    populateVertexNormals();  
+    populateVertexNormals();
+    populateVertexCurvatures();  
+
+    for (size_t i = 0; i < vertices.size(); ++i)
+    {
+        const auto &curvature = vertices_[sourceVertexIndices[i]].curvature;
+        vertices[i].k1 = curvature.k1;
+        vertices[i].k2 = curvature.k2;
+    }
 
     count_ = static_cast<GLsizei>(vertices.size());
     number_parts = count_ / 3;
@@ -160,10 +175,19 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<void *>(offsetof(Vertex, normal)));
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                      reinterpret_cast<void *>(offsetof(Vertex, k1)));
+
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                      reinterpret_cast<void *>(offsetof(Vertex, k2)));
     glBindVertexArray(0);
     std::cout << "Assembly: " << paths.size() << " OBJ file(s), " << count_ / 3 << " triangles\n";
 
     setupNormalBuffers();
+    setupCurveBuffers();
 }
 
 // create indexed mesh by populating vertices_ and triangles_ from obj reader 
@@ -317,9 +341,152 @@ void Mesh::populateVertexNormals() {
     }
 }
 
+// based off Rusinkiewicz - Estimating Curvatures and Their Derivatives on Triangle Meshes
+using CoordinateSystem = std::pair<glm::vec3, glm::vec3>;
+void Mesh::populateVertexCurvatures() {
+    // initialize a list of u_p, v_p where (u,v) are the directions of an orthonormal coordinate system in the tangent frame of the vertex
+    std::vector<CoordinateSystem> uv_p;
+    for (std::size_t i = 0; i < vertices_.size(); i++) {
+        GeometryVertex v = vertices_[i];
+        if (length(v.normal) < 1e-8f) {
+            // Handle invalid normal.
+            uv_p.emplace_back(glm::vec3(0.0f), glm::vec3(0.0f));
+            continue;
+        }
+
+        glm::vec3 n_p = normalize(v.normal);
+        // Pick a reference vector that isn't parallel to n_p
+        glm::vec3 reference(0.0f, 1.0f, 0.0f);
+
+        if (abs(dot(n_p, reference)) > 0.99f) {
+            reference = glm::vec3(1.0f, 0.0f, 0.0f);
+        }
+
+        // Construct tangent frame
+        glm::vec3 u_p = normalize(cross(reference, n_p));
+        glm::vec3 v_p = cross(n_p, u_p);
+        CoordinateSystem uv = std::make_pair(u_p, v_p);
+        uv_p.emplace_back(uv);
+    }
+    std::vector<Eigen::Matrix2f> vertexTensors(vertices_.size(), Eigen::Matrix2f::Zero());
+    std::vector<float> vertexWeights(vertices_.size(), 0.0f);
+    for (const auto& tri : triangles_) {
+        // Compute the curvature of each face
+        unsigned int ind0 = tri.v0;
+        unsigned int ind1 = tri.v1;
+        unsigned int ind2 = tri.v2;
+
+        GeometryVertex& v0 = vertices_[ind0];
+        GeometryVertex& v1 = vertices_[ind1];
+        GeometryVertex& v2 = vertices_[ind2];
+
+        std::array<unsigned int, 3> indices{ ind0, ind1, ind2 };
+
+        glm::vec3 e0 = v2.position - v1.position;
+        glm::vec3 e1 = v0.position - v2.position;
+        glm::vec3 e2 = v1.position - v0.position;
+
+        glm::vec3 faceCross = cross(
+            v1.position - v0.position,
+            v2.position - v0.position
+        );
+
+        // check for degenerate triangles
+        if (length(faceCross) < 1e-8f) 
+            continue;
+
+        glm::vec3 n_f = normalize(faceCross);
+
+        // get u v directions in tangent frame of face
+        glm::vec3 u_f = normalize(e0);
+        glm::vec3 v_f = cross(n_f, u_f);
+
+        glm::vec3 n0 = normalize(v0.normal);
+        glm::vec3 n1 = normalize(v1.normal);
+        glm::vec3 n2 = normalize(v2.normal);
+
+        // construct system of equations to solve for tensor
+        Eigen::Matrix<float, 6, 3> A;
+        A <<
+            dot(e0, u_f), dot(e0, v_f), 0.0f,
+            0.0f, dot(e0, u_f), dot(e0, v_f),
+            dot(e1, u_f), dot(e1, v_f), 0.0f,
+            0.0f, dot(e1, u_f), dot(e1, v_f),
+            dot(e2, u_f), dot(e2, v_f), 0.0f,
+            0.0f, dot(e2, u_f), dot(e2, v_f);
+        Eigen::Matrix<float, 6, 1> B;
+        B <<
+            dot(n2 - n1, u_f),
+            dot(n2 - n1, v_f),
+            dot(n0 - n2, u_f),
+            dot(n0 - n2, v_f),
+            dot(n1 - n0, u_f),
+            dot(n1 - n0, v_f);
+
+        Eigen::ColPivHouseholderQR<Eigen::Matrix<float, 6, 3>> qr(A);
+        if (qr.rank() < 3)
+            continue;
+
+        const Eigen::Vector3f faceTensor = qr.solve(B);
+        if (!faceTensor.allFinite())
+            continue;
+
+        Eigen::Matrix2f T_f;
+        T_f << faceTensor(0), faceTensor(1),
+            faceTensor(1), faceTensor(2);
+
+        for (auto index : indices) {
+            // re-express face tensor in terms of vertex coordinate system
+            // add tensor, with weight, to vertex curvature
+            glm::vec3 u_p = uv_p[index].first;
+            glm::vec3 v_p = uv_p[index].second;
+
+            Eigen::Matrix2f R;
+            R << dot(u_f, u_p), dot(u_f, v_p),
+                dot(v_f, u_p), dot(v_f, v_p);
+            Eigen::Matrix2f T_p = R.transpose() * T_f * R;
+
+            // give the face tensor a weight based on the area of the triangle
+            float weight = 0.5f * length(cross(v1.position - v0.position, v2.position - v0.position));
+            vertexTensors[index] += weight * T_p;
+            vertexWeights[index] += weight;
+        }
+    }
+    for (std::size_t i = 0; i < vertices_.size(); i++) {
+        if (vertexWeights[i] > 0.0f) {
+            vertexTensors[i] /= vertexWeights[i];
+        }
+        // extract eigenvalues/vectors for curvature and direction data
+        // save in vertex
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix2f> solver(vertexTensors[i]);
+
+        if (solver.info() != Eigen::Success)
+            continue;
+
+        Eigen::Vector2f curvatures = solver.eigenvalues();
+        Eigen::Matrix2f directions = solver.eigenvectors();
+        // Eigen returns eigenvalues in ascending order.
+        vertices_[i].curvature.k1 = curvatures(0);
+        vertices_[i].curvature.k2 = curvatures(1);
+
+        // Convert the 2D eigenvectors into 3D tangent-space directions.
+        glm::vec3 u_p = uv_p[i].first;
+        glm::vec3 v_p = uv_p[i].second;
+
+        Eigen::Vector2f d1 = directions.col(0);
+        Eigen::Vector2f d2 = directions.col(1);
+
+        vertices_[i].curvature.dir1 =
+            normalize(d1(0) * u_p + d1(1) * v_p);
+
+        vertices_[i].curvature.dir2 =
+            normalize(d2(0) * u_p + d2(1) * v_p);
+        }
+}
+
 std::vector<glm::vec3> Mesh::createNormalVisualization() const {
     std::vector<glm::vec3> normalData;
-    const float lineLength = 0.1f;
+    const float lineLength = 0.05f;
 
     for (const auto& v : vertices_) {
         glm::vec3 start = v.position;
@@ -329,6 +496,23 @@ std::vector<glm::vec3> Mesh::createNormalVisualization() const {
     }
 
     return normalData;
+}
+
+std::vector<glm::vec3> Mesh::createCurveDirectionVisuals() const {
+    std::vector<glm::vec3> curveData;
+    const float lineLength = 0.05f;
+
+    for (const auto& v : vertices_) {
+        glm::vec3 start = v.position;
+        glm::vec3 end1 = v.position + lineLength * v.curvature.dir1;
+        glm::vec3 end2 = v.position + lineLength * v.curvature.dir2;
+        curveData.push_back(start);
+        curveData.push_back(end1);
+        curveData.push_back(start);
+        curveData.push_back(end2);
+    }
+
+    return curveData;
 }
 
 void Mesh::setupNormalBuffers()
@@ -367,6 +551,42 @@ void Mesh::setupNormalBuffers()
     glBindVertexArray(0);
 }
 
+void Mesh::setupCurveBuffers()
+{
+    std::vector<glm::vec3> curveData = createCurveDirectionVisuals();
+
+    if (curveData.size() > static_cast<size_t>(std::numeric_limits<GLsizei>::max()))
+    {
+        throw std::runtime_error("Too many normal visualization vertices");
+    }
+    curveCount_ = static_cast<GLsizei>(curveData.size());
+
+    glGenVertexArrays(1, &curveVAO_);
+    glGenBuffers(1, &curveVBO_);
+
+    glBindVertexArray(curveVAO_);
+
+    glBindBuffer(GL_ARRAY_BUFFER, curveVBO_);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        curveData.size() * sizeof(glm::vec3),
+        curveData.data(),
+        GL_STATIC_DRAW
+    );
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(glm::vec3),
+        nullptr
+    );
+
+    glBindVertexArray(0);
+}
+
 Mesh::~Mesh()
 {
     // The owning scene must be destroyed while its OpenGL context is still current.
@@ -382,6 +602,14 @@ void Mesh::DrawVertexNormals() const
     glDrawArrays(GL_LINES, 0, normalCount_);
     glBindVertexArray(0);
 }
+
+void Mesh::DrawCurvatureDirections() const
+{
+    glBindVertexArray(curveVAO_);
+    glDrawArrays(GL_LINES, 0, curveCount_);
+    glBindVertexArray(0);
+}
+
 
 void Mesh::Draw() const
 {

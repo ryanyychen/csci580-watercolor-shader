@@ -56,7 +56,9 @@ void Render_World::Render(int width, int height)
         }
         // The vertex shader now has transforms; the fragment shader has the material.
         object->Draw();
-        if (show_normals)
+        if (show_vertex_attributes) {
             object->DrawVertexNormals();
+            object->DrawCurvatureDirections();
+        }
     }
 }

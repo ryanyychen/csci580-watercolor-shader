@@ -30,10 +30,12 @@ Input &input(GLFWwindow *window)
 
 
 Shader * phongShader;
+Shader * curveShader;
 Shader * watercolorShader;
 
 enum class ShaderType {
     Phong,
+    CurveMap,
     Watercolor
 };
 
@@ -41,6 +43,7 @@ ShaderType currentShader = ShaderType::Phong;
 
 void createShaders(const std::filesystem::path &resources) {
     phongShader = new Shader(resources / "shaders/phong.vert", resources / "shaders/phong.frag");
+    curveShader = new Shader(resources / "shaders/curvature.vert", resources / "shaders/curvature.frag");
     watercolorShader = new Shader(resources / "shaders/watercolor.vert", resources / "shaders/watercolor.frag");
 }
 
@@ -49,6 +52,12 @@ void switchShaders(GLFWwindow * window) {
     auto& meshes = state.world->objects;
     switch(currentShader) {
         case(ShaderType::Phong):
+            currentShader = ShaderType::CurveMap;
+            for (auto& obj : meshes) {
+                obj->material_shader = curveShader;
+            }
+            break;
+        case(ShaderType::CurveMap):
             currentShader = ShaderType::Watercolor;
             for (auto& obj : meshes) {
                 obj->material_shader = watercolorShader;
@@ -78,6 +87,8 @@ void key(GLFWwindow *window, int k, int, int action, int)
         input(window).save_screenshot = true;
     if (k == GLFW_KEY_SPACE)
         switchShaders(window);
+    if (k == GLFW_KEY_C)
+        input(window).world->show_vertex_attributes = !input(window).world->show_vertex_attributes;
 }
 
 void mouseButton(GLFWwindow *window, int button, int action, int)

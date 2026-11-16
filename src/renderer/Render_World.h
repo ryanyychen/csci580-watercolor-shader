@@ -25,6 +25,7 @@ class Render_World
     glm::vec3 background_color{0.93f, 0.92f, 0.89f};
     // Diagnostic normal colors bypass lighting in the fragment shader.
     bool show_normals = false;
+    bool show_vertex_attributes = false; // show normal and curvature directions per vertex
 
     // Current shader supports up to eight constant-intensity point lights.
     void Render(int width, int height);

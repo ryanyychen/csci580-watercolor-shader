@@ -5,6 +5,15 @@
 #include <glad/gl.h>
 #include "Object.h"
 
+struct PrincipalCurvature
+{
+    float k1 = 0.0f;
+    float k2 = 0.0f;
+
+    glm::vec3 dir1{0.0f};
+    glm::vec3 dir2{0.0f};
+};
+
 struct GeometryVertex
 {
     glm::vec3 position;
@@ -12,6 +21,8 @@ struct GeometryVertex
 
     // indices to connecting vertices
     std::vector<unsigned int> neighbors;
+
+    PrincipalCurvature curvature;
 };
 
 struct Triangle
@@ -21,14 +32,6 @@ struct Triangle
     unsigned int v2;
 };
 
-struct PrincipalCurvature
-{
-    float k1 = 0.0f;
-    float k2 = 0.0f;
-
-    glm::vec3 dir1{0.0f};
-    glm::vec3 dir2{0.0f};
-};
 // One or more OBJ files become one draw call. Material groups and UVs are deferred.
 class Mesh : public Object
 {
@@ -41,6 +44,7 @@ class Mesh : public Object
     Mesh(const Mesh &) = delete;
     Mesh &operator=(const Mesh &) = delete;
     void DrawVertexNormals() const override;
+    void DrawCurvatureDirections() const override;
     void Draw() const override;
 
   private:
@@ -52,8 +56,11 @@ class Mesh : public Object
     void createIndexedMesh(const tinyobj::ObjReader reader, size_t baseVertex);
     void populateVertexNeighbors();
     void populateVertexNormals();
+    void populateVertexCurvatures();
     std::vector<glm::vec3> createNormalVisualization() const; // return a list of normal start/end points to send to gpu for rendering
+    std::vector<glm::vec3> createCurveDirectionVisuals() const;
     void setupNormalBuffers();
+    void setupCurveBuffers();
 
     // VAO describes attribute layout; VBO owns interleaved position/normal data.
     // Copying is disabled because two Mesh instances must not own the same handles.
@@ -65,4 +72,9 @@ class Mesh : public Object
     GLuint normalVAO_ = 0;
     GLuint normalVBO_ = 0;
     GLsizei normalCount_ = 0;
+
+    // curvature visualization
+    GLuint curveVAO_ = 0;
+    GLuint curveVBO_ = 0;
+    GLsizei curveCount_ = 0;
 };
