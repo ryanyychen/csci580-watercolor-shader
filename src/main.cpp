@@ -54,6 +54,7 @@ Shader * phongShader;
 Shader * curveShader;
 Shader * watercolorShader;
 Shader * directionShader;
+Shader * paperShader;
 
 enum class ShaderType {
     Phong,
@@ -68,6 +69,7 @@ void createShaders(const std::filesystem::path &resources) {
     curveShader = new Shader(resources / "shaders/curvature.vert", resources / "shaders/curvature.frag");
     watercolorShader = new Shader(resources / "shaders/watercolor.vert", resources / "shaders/watercolor.frag");
     directionShader = new Shader(resources / "shaders/direction.vert", resources / "shaders/direction.frag");
+    paperShader = new Shader(resources / "shaders/paper.vert", resources / "shaders/paper.frag");
 }
 
 void switchShaders(GLFWwindow * window) {
@@ -172,6 +174,37 @@ void scroll(GLFWwindow *window, double, double y)
     input(window).world->camera.Zoom(static_cast<float>(y));
 }
 
+bool paperOverlayEnabled(const Render_World &world)
+{
+    for (const auto &object : world.objects)
+    {
+        if (object && object->material.useLIC)
+            return true;
+    }
+    return false;
+}
+
+void drawPaperOverlay(
+    Shader &shader,
+    Texture &paperTexture,
+    GLuint paperVAO,
+    float strength)
+{
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    shader.use();
+    paperTexture.Bind(GL_TEXTURE0);
+    shader.set("paperTexture", 0);
+    shader.set("uPaperStrength", strength);
+    glBindVertexArray(paperVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
 
 void run(GLFWwindow *window, const std::filesystem::path &resources,
          const std::vector<std::filesystem::path> &meshPaths, bool smokeTest,
@@ -246,6 +279,21 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     world.lights.front().color = glm::vec3(0.3f);
     world.ambient_intensity = 0.12f;
 
+    // setup paper texture overlay
+    const int paperSize = 256;
+    FloatTextureData paperValues{
+        createPaperTexture(paperSize, paperSize),
+        paperSize
+    };
+    if (paperValues.rows == nullptr)
+        throw std::runtime_error("Failed to allocate paper texture");
+    Texture paperTexture(paperSize, paperSize, paperValues.rows);
+
+    GLuint paperVAO = 0;
+    glGenVertexArrays(1, &paperVAO);
+    if (paperVAO == 0)
+        throw std::runtime_error("Failed to create paper overlay VAO");
+
     // Register callbacks after their input state and scene are ready.
     Input state;
     state.world = &world;
@@ -273,6 +321,9 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         
         // Render first, then read the back buffer for screenshots before presenting it.
         world.Render(width, height);
+        if (paperOverlayEnabled(world))
+            drawPaperOverlay(*paperShader, paperTexture, paperVAO, 0.20f);
+
         if (!outputPath.empty() && frames == 0)
             saveScreenshot(world.camera, outputPath);
         
@@ -304,6 +355,7 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         if ((smokeTest && frames == 3) || (!smokeTest && !outputPath.empty()))
             break;
     }
+    glDeleteVertexArrays(1, &paperVAO);
     // Mesh and shader destruct before their OpenGL context is destroyed.
 }
 } // namespace

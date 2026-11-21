@@ -279,3 +279,97 @@ float ** createLineIntegralConvolutionTexture(
   }
   return pixels;
 }
+
+float ** createPaperTexture(int width, int height) {
+  if (width <= 0 || height <= 0)
+    return nullptr;
+
+  int noiseSize = std::max(width, height);
+  generateGradientGrid();
+  float **noise = createPerlinTexture(noiseSize);
+  if (noise == nullptr)
+    return nullptr;
+
+  float **paperHeight = static_cast<float **>(
+      malloc(static_cast<size_t>(height) * sizeof(float *)));
+  if (paperHeight == nullptr)
+  {
+    for (int y = 0; y < noiseSize; ++y)
+      free(noise[y]);
+    free(noise);
+    return nullptr;
+  }
+
+  for (int y = 0; y < height; ++y)
+  {
+    paperHeight[y] = static_cast<float *>(
+        malloc(static_cast<size_t>(width) * sizeof(float)));
+    if (paperHeight[y] == nullptr)
+    {
+      for (int allocatedRow = 0; allocatedRow < y; ++allocatedRow)
+        free(paperHeight[allocatedRow]);
+      free(paperHeight);
+      for (int noiseRow = 0; noiseRow < noiseSize; ++noiseRow)
+        free(noise[noiseRow]);
+      free(noise);
+      return nullptr;
+    }
+  }
+
+  // perlin noise for the large bumps, white noise for the fiber grain
+  std::vector<float> grain(width * height);
+  for (int j = 0; j < height; j++)
+  {
+      for (int i = 0; i < width; i++)
+      {
+          float random = static_cast<float>(rand()) /
+              static_cast<float>(RAND_MAX);
+          grain[j * width + i] = 0.6f * noise[j][i] + 0.4f * random;
+      }
+  }
+
+  // 3x3 average blur to soften the grain
+  float minValue = 1000.0f;
+  float maxValue = -1000.0f;
+  for (int j = 0; j < height; j++)
+  {
+      for (int i = 0; i < width; i++)
+      {
+          float sum = 0.0f;
+          int count = 0;
+          for (int dj = -1; dj <= 1; dj++)
+          {
+              for (int di = -1; di <= 1; di++)
+              {
+                  int ni = i + di;
+                  int nj = j + dj;
+                  if (ni < 0 || ni >= width || nj < 0 || nj >= height)
+                      continue;
+                  sum += grain[nj * width + ni];
+                  count++;
+              }
+          }
+          float h = sum / count;
+          paperHeight[j][i] = h;
+          minValue = std::min(minValue, h);
+          maxValue = std::max(maxValue, h);
+      }
+  }
+
+  // rescale to [0,1], the paper needs 0 < h < 1
+  float range = maxValue - minValue;
+  for (int y = 0; y < height; ++y)
+  {
+      for (int x = 0; x < width; ++x)
+      {
+          float h = paperHeight[y][x];
+          paperHeight[y][x] =
+              range > 1e-6f ? (h - minValue) / range : 0.5f;
+      }
+  }
+
+  for (int y = 0; y < noiseSize; y++)
+      free(noise[y]);
+  free(noise);
+  return paperHeight;
+}

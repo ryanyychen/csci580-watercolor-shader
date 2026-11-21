@@ -14,5 +14,5 @@ float ** createLineIntegralConvolutionTexture(
     int size,
     float ** source,
     const std::vector<glm::vec2> &directionField);
-
+float ** createPaperTexture(int width, int height);
 #endif
