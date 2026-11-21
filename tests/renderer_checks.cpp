@@ -1,12 +1,16 @@
 #include "renderer/Camera.h"
 #include "renderer/Image_Output.h"
+#include "renderer/TextureGenerator.h"
 #include <glm/gtc/constants.hpp>
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 // Unlike assert(), these checks stay active in optimized/release builds.
 void require(bool condition, const char *message)
@@ -65,7 +69,55 @@ int main()
         require(!(file >> extra), "Unexpected PPM pixels");
         file.close();
         std::filesystem::remove(filename);
-        std::cout << "Camera projection, orbit/zoom, and PPM orientation/channels passed\n";
+        const int textureSize = 33;
+        std::vector<float> stripeNoise(static_cast<size_t>(textureSize) * textureSize);
+        std::vector<glm::vec2> horizontalField(stripeNoise.size(), glm::vec2(1.0f, 0.0f));
+        for (int y = 0; y < textureSize; ++y)
+            for (int x = 0; x < textureSize; ++x)
+                stripeNoise[static_cast<size_t>(y) * textureSize + x] =
+                    0.5f + 0.5f * std::sin(2.0f * glm::pi<float>() * x / 8.0f);
+
+        const auto lic = createLineIntegralConvolutionTexture(
+            textureSize, stripeNoise, horizontalField);
+        float sourceVariation = 0.0f;
+        float licVariation = 0.0f;
+        for (int x = 8; x < 24; ++x)
+        {
+            const size_t index = static_cast<size_t>(textureSize / 2) * textureSize + x;
+            sourceVariation += std::abs(
+                stripeNoise[index] - stripeNoise[index - 1]);
+            licVariation += std::abs(lic[index] - lic[index - 1]);
+        }
+        require(licVariation < sourceVariation * 0.25f,
+                "LIC did not smooth noise along the vector field");
+
+        std::vector<std::vector<float>> sourceRows(
+            textureSize, std::vector<float>(textureSize));
+        std::vector<float *> sourceRowPointers(textureSize);
+        for (int y = 0; y < textureSize; ++y)
+        {
+            sourceRowPointers[y] = sourceRows[y].data();
+            for (int x = 0; x < textureSize; ++x)
+                sourceRows[y][x] = stripeNoise[static_cast<size_t>(y) * textureSize + x];
+        }
+        float **licRows = createLineIntegralConvolutionTexture(
+            textureSize, sourceRowPointers.data(), horizontalField);
+        require(licRows != nullptr, "LIC row texture allocation failed");
+        for (int y = 0; y < textureSize; ++y)
+            for (int x = 0; x < textureSize; ++x)
+                require(std::abs(licRows[y][x] -
+                                 lic[static_cast<size_t>(y) * textureSize + x]) < 1e-6f,
+                        "LIC row texture differs from vector output");
+        for (int y = 0; y < textureSize; ++y)
+            std::free(licRows[y]);
+        std::free(licRows);
+
+        std::fill(horizontalField.begin(), horizontalField.end(), glm::vec2(0.0f));
+        const auto unchanged = createLineIntegralConvolutionTexture(
+            textureSize, stripeNoise, horizontalField);
+        require(unchanged == stripeNoise, "LIC changed noise outside the direction field");
+
+        std::cout << "Camera, PPM, and LIC checks passed\n";
         return 0;
     }
     catch (const std::exception &error)

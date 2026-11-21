@@ -15,14 +15,14 @@ Running `./watercolor "path/to/model.obj"` follows this path:
 ```text
 main.cpp: parse args, initialize GLFW, create the OpenGL context, and load one or more OBJ files
   -> Shader.cpp: compile the active Phong, curvature, and watercolor shaders
-  -> Mesh.cpp: read OBJ -> triangulate -> compute normals and principal curvature -> normalize bounds
+  -> Mesh.cpp: read OBJ/UVs -> triangulate -> compute normals and principal curvature -> normalize bounds
                -> upload vertices and diagnostic buffers into GPU buffers
   -> Render_World.cpp: pass camera, object material, lights, and the noise texture to the active shader
-  -> phong.vert / curvature.vert / watercolor.vert: transform positions and normals into world/clip space
+  -> phong.vert / curvature.vert / watercolor.vert: transform positions and normals; watercolor also passes texture coordinates
   -> OpenGL: rasterize triangles and interpolate per-vertex attributes
   -> phong.frag: calculate ambient + diffuse + specular lighting
   -> curvature.frag: color mesh regions by curvature magnitude
-  -> watercolor.frag: sample the generated Perlin-noise paper texture for tonal watercolor shading
+  -> watercolor.frag: sample Perlin noise filtered along a principal direction in OBJ UV space
   -> OpenGL: use depth testing to determine visible fragments in the framebuffer
   -> main.cpp: present the rendered frame in the window
 ```
@@ -64,20 +64,32 @@ Neither the simulation nor the watercolor shader uses this module yet.
 | [SConstruct](SConstruct) | Compilation, dependencies, debug/release settings, and the root executable. |
 | [src/main.cpp](src/main.cpp) | Startup, input callbacks, scene setup, material colors, and light settings. |
 | [src/renderer/Object.h](src/renderer/Object.h) | Material fields and per-object model transform. Values assigned in `main.cpp` override material defaults. |
-| [src/renderer/Mesh.cpp](src/renderer/Mesh.cpp) | OBJ loading, triangulation, normal fallback, shared bounds, and GPU geometry. |
+| [src/renderer/Mesh.cpp](src/renderer/Mesh.cpp) | OBJ loading, UV and triplanar principal-direction field baking, triangulation, normals, and GPU geometry. |
 | [src/renderer/Camera.cpp](src/renderer/Camera.cpp) | View/projection matrices, orbit, zoom, and framebuffer readback. |
 | [src/renderer/Render_World.cpp](src/renderer/Render_World.cpp) | Per-frame drawing and passing scene/material values to shader uniforms. |
 | [src/renderer/Shader.cpp](src/renderer/Shader.cpp) | GLSL compilation/linking and uniform upload helpers. |
-| [src/renderer/TextureGenerator.cpp](src/renderer/TextureGenerator.cpp) | Generates the Perlin-noise texture used by the watercolor shading pass. |
+| [src/renderer/TextureGenerator.cpp](src/renderer/TextureGenerator.cpp) | Generates Perlin noise and line-integral-convolution filtering for the watercolor shading pass. |
 | [shaders/phong.vert](shaders/phong.vert) | Standard model/view/projection transform plus inverse-transpose normal conversion. |
 | [shaders/phong.frag](shaders/phong.frag) | Ambient, diffuse, and specular Phong lighting. |
 | [shaders/curvature.vert](shaders/curvature.vert) | Passes curvature values through the pipeline for diagnostic visualization. |
 | [shaders/curvature.frag](shaders/curvature.frag) | Maps curvature magnitude to a color for the curvature visualization mode. |
-| [shaders/watercolor.vert](shaders/watercolor.vert) | Emits object-space noise coordinates alongside world-space position and normal. |
+| [shaders/watercolor.vert](shaders/watercolor.vert) | Emits OBJ UVs or object-space position/normal data for triplanar noise mapping. |
 | [shaders/watercolor.frag](shaders/watercolor.frag) | Samples the noise texture to produce a paper-like watercolor tone. |
 | [src/renderer/Image_Output.cpp](src/renderer/Image_Output.cpp) | Write the rendered framebuffer to a P3 PPM image. |
 | [src/renderer/WatercolorSim.cpp](src/renderer/WatercolorSim.cpp) | Physical watercolor simulation: paper grid, wet area, water, and pigment. |
 | [src/renderer/KubelkaMunk.cpp](src/renderer/KubelkaMunk.cpp) | Kubelka-Munk pigment colors: turns layers of pigment over paper into the final RGB color. |
+
+For meshes with complete OBJ UVs within one tile, the watercolor pass builds both a Perlin
+texture and a `dir1`-aligned LIC version from the same source. Press **L** to
+toggle between them while viewing the watercolor shader; the LIC view is tinted
+blue. Meshes without complete UVs use six signed-axis projections; their Perlin
+and LIC samples are blended according to the surface normal, so the cow can use
+LIC without an authored UV atlas. UVs extending beyond one tile use this
+triplanar mapping too, avoiding compression of the noise over oversized UV ranges.
+The LIC output applies post-LIC bias and gain (starting defaults: `0.55` and
+`0.70`) for stronger, brush-like streak contrast. Set either value to `0.5`
+for a neutral curve; change `mesh->material.licBias` and `licGain` to tune it.
+These controls do not affect the Perlin-only view.
 
 For colors, edit `mesh->material` in `src/main.cpp`: `color_diffuse` is the main
 surface color, `color_ambient` affects the ambient contribution, `color_specular`
@@ -134,12 +146,14 @@ For MSVC, use Developer PowerShell and add `toolchain=msvc` to the build command
 | Left drag / mouse wheel | Orbit / zoom |
 | R | Reset camera |
 | N | Toggle normal visualization |
-| C | Toggle curvature/normal direction visualization |
+| C | Toggle curvature direction visualization |
+| 1 / 2 | Select principal direction `dir1` / `dir2` for LIC |
 | S | Save `output.ppm` in the working directory |
 | Space | Switch between shaders |
+| L | Toggle between Perlin and LIC textures in the watercolor shader |
 | Esc | Exit |
 
-Other commands: `scons check` checks camera math and PPM output,
+Other commands: `scons check` checks camera math, PPM output, and LIC filtering,
 `scons mode=release -j4` builds an optimized executable, and `scons -c` cleans
 the default build. Append `--smoke-test` to a viewer command for a short hidden-window
 graphics check; `--help` lists the command-line options.

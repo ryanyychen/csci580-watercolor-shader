@@ -1,5 +1,7 @@
 #pragma once
+#include <array>
 #include <filesystem>
+#include <glm/glm.hpp>
 #include <tiny_obj_loader.h>
 #include <vector>
 #include <glad/gl.h>
@@ -32,7 +34,7 @@ struct Triangle
     unsigned int v2;
 };
 
-// One or more OBJ files become one draw call. Material groups and UVs are deferred.
+// One or more OBJ files become one draw call; per-corner OBJ UVs are preserved.
 class Mesh : public Object
 {
   public:
@@ -43,13 +45,31 @@ class Mesh : public Object
     ~Mesh() override;
     Mesh(const Mesh &) = delete;
     Mesh &operator=(const Mesh &) = delete;
+    bool hasTextureCoordinates() const { return hasTextureCoordinates_; }
+    bool usesUVNoiseMapping() const { return usesUVNoiseMapping_; }
+    std::vector<glm::vec2> createPrincipalDirectionField(
+        int size, PrincipalDirection direction = PrincipalDirection::Dir1) const;
+    std::array<std::vector<glm::vec2>, 6> createTriplanarPrincipalDirectionFields(
+        int size, PrincipalDirection direction = PrincipalDirection::Dir1) const;
     void DrawVertexNormals() const override;
     void DrawCurvatureDirections() const override;
     void Draw() const override;
 
   private:
+    struct UVTriangle
+    {
+        std::array<unsigned int, 3> vertexIndices;
+        std::array<glm::vec2, 3> texcoords;
+    };
+
+    std::vector<glm::vec2> createDirectionField(
+        int size, PrincipalDirection direction, int projectionAxis, int projectionSign) const;
+
     std::vector<GeometryVertex> vertices_; // list of unique vertices
     std::vector<Triangle> triangles_; // indexed triangle mesh
+    std::vector<UVTriangle> uvTriangles_;
+    bool hasTextureCoordinates_ = true;
+    bool usesUVNoiseMapping_ = false;
 
     std::vector<PrincipalCurvature> curvatureData_;
 
@@ -57,6 +77,7 @@ class Mesh : public Object
     void populateVertexNeighbors();
     void populateVertexNormals();
     void populateVertexCurvatures();
+    void orientPrincipalDirections();
     std::vector<glm::vec3> createNormalVisualization() const; // return a list of normal start/end points to send to gpu for rendering
     std::vector<glm::vec3> createCurveDirectionVisuals() const;
     void setupNormalBuffers();

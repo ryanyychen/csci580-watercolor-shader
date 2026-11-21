@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 namespace
 {
@@ -28,10 +29,31 @@ Input &input(GLFWwindow *window)
     return *static_cast<Input *>(glfwGetWindowUserPointer(window));
 }
 
+void freeTexturePixels(float **pixels, int size)
+{
+    if (pixels == nullptr)
+        return;
+    for (int y = 0; y < size; ++y)
+        std::free(pixels[y]);
+    std::free(pixels);
+}
+
+struct FloatTextureData
+{
+    float **rows;
+    int size;
+
+    ~FloatTextureData()
+    {
+        freeTexturePixels(rows, size);
+    }
+};
+
 
 Shader * phongShader;
 Shader * curveShader;
 Shader * watercolorShader;
+Shader * directionShader;
 
 enum class ShaderType {
     Phong,
@@ -45,6 +67,7 @@ void createShaders(const std::filesystem::path &resources) {
     phongShader = new Shader(resources / "shaders/phong.vert", resources / "shaders/phong.frag");
     curveShader = new Shader(resources / "shaders/curvature.vert", resources / "shaders/curvature.frag");
     watercolorShader = new Shader(resources / "shaders/watercolor.vert", resources / "shaders/watercolor.frag");
+    directionShader = new Shader(resources / "shaders/direction.vert", resources / "shaders/direction.frag");
 }
 
 void switchShaders(GLFWwindow * window) {
@@ -85,6 +108,40 @@ void key(GLFWwindow *window, int k, int, int action, int)
         input(window).world->show_normals = !input(window).world->show_normals;
     if (k == GLFW_KEY_S)
         input(window).save_screenshot = true;
+    if (k == GLFW_KEY_1 || k == GLFW_KEY_2)
+    {
+        const PrincipalDirection direction =
+            k == GLFW_KEY_1 ? PrincipalDirection::Dir1 : PrincipalDirection::Dir2;
+        bool directionChanged = false;
+        for (auto &object : input(window).world->objects)
+        {
+            directionChanged |= object->material.principalDirection != direction;
+            object->material.principalDirection = direction;
+        }
+        if (directionChanged)
+            std::cout << "Principal direction: "
+                      << (direction == PrincipalDirection::Dir1 ? "dir1" : "dir2")
+                      << '\n';
+    }
+    if (k == GLFW_KEY_L)
+    {
+        bool licToggled = false;
+        bool licEnabled = false;
+        for (auto &object : input(window).world->objects)
+        {
+            const size_t directionIndex =
+                static_cast<size_t>(object->material.principalDirection);
+            if (object->material.licTextures[directionIndex] ||
+                object->material.useTriplanarNoise)
+            {
+                object->material.useLIC = !object->material.useLIC;
+                licToggled = true;
+                licEnabled = object->material.useLIC;
+            }
+        }
+        if (licToggled)
+            std::cout << "LIC " << (licEnabled ? "enabled" : "disabled") << '\n';
+    }
     if (k == GLFW_KEY_SPACE)
         switchShaders(window);
     if (k == GLFW_KEY_C)
@@ -126,6 +183,7 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     Render_World world;
     auto mesh = std::make_unique<Mesh>(meshPaths);
     mesh->material_shader = phongShader;
+    mesh->direction_shader = directionShader;
 
     // Scene setup: object material, world lights, and camera.
     mesh->material.color_ambient = glm::vec3(0.02f, 0.02f, 0.8f);
@@ -136,8 +194,52 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     // generate noise textures for watercolor shading
     generateGradientGrid();
     const int noiseTextureSize = 256;
-    float ** noiseValues = createPerlinTexture(noiseTextureSize);
-    mesh->material.texture = new Texture(noiseTextureSize, noiseTextureSize, noiseValues);
+    FloatTextureData noiseValues{createPerlinTexture(noiseTextureSize), noiseTextureSize};
+    if (noiseValues.rows == nullptr)
+        throw std::runtime_error("Failed to allocate Perlin noise texture");
+    mesh->material.texture = new Texture(noiseTextureSize, noiseTextureSize, noiseValues.rows);
+
+    const PrincipalDirection directions[2] = {
+        PrincipalDirection::Dir1, PrincipalDirection::Dir2};
+    if (mesh->usesUVNoiseMapping())
+    {
+        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+        {
+            const auto directionField = mesh->createPrincipalDirectionField(
+                noiseTextureSize, directions[directionIndex]);
+            FloatTextureData licValues{
+                createLineIntegralConvolutionTexture(
+                    noiseTextureSize, noiseValues.rows, directionField),
+                noiseTextureSize};
+            if (licValues.rows == nullptr)
+                throw std::runtime_error("Failed to allocate LIC texture");
+            mesh->material.licTextures[directionIndex] =
+                new Texture(noiseTextureSize, noiseTextureSize, licValues.rows);
+        }
+        mesh->material.useMeshTextureCoordinates = true;
+    }
+    else
+    {
+        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+        {
+            const auto directionFields = mesh->createTriplanarPrincipalDirectionFields(
+                noiseTextureSize, directions[directionIndex]);
+            for (size_t projectionIndex = 0; projectionIndex < directionFields.size();
+                 ++projectionIndex)
+            {
+                FloatTextureData licValues{
+                    createLineIntegralConvolutionTexture(
+                        noiseTextureSize, noiseValues.rows,
+                        directionFields[projectionIndex]),
+                    noiseTextureSize};
+                if (licValues.rows == nullptr)
+                    throw std::runtime_error("Failed to allocate triplanar LIC texture");
+                mesh->material.triplanarLICTextures[directionIndex][projectionIndex] =
+                    new Texture(noiseTextureSize, noiseTextureSize, licValues.rows);
+            }
+        }
+        mesh->material.useTriplanarNoise = true;
+    }
 
     world.objects.push_back(std::move(mesh));
     world.lights.front().position = glm::vec3(3.0f, 4.0f, 4.0f);

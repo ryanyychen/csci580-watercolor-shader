@@ -161,11 +161,12 @@ program = env.Program("watercolor", objects(sources, "renderer") + support)
 # The root executable loads shaders/ and assets/ directly from the repository.
 Default(program)
 
-# Tests use camera/image helpers without creating a window or rendering a frame.
+# Tests use CPU helpers without creating a window or rendering a frame.
 check_sources = [
     "tests/renderer_checks.cpp",
     "src/renderer/Camera.cpp",
     "src/renderer/Image_Output.cpp",
+    "src/renderer/TextureGenerator.cpp",
 ]
 checks = env.Program(str(build / "renderer_checks"), objects(check_sources, "checks") + support)
 
@@ -174,6 +175,6 @@ def run_checks(target, source, env):
     subprocess.run([str(Path(str(checks[0])).resolve())], cwd=build, check=True)
 
 
-check = Alias("check", checks, Action(run_checks, "Checking camera and PPM output"))
+check = Alias("check", checks, Action(run_checks, "Checking renderer and LIC helpers"))
 # Rerun assertions even if the test executable itself did not need recompiling.
 AlwaysBuild(check)

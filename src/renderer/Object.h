@@ -1,8 +1,15 @@
 #pragma once
+#include <array>
 #include <glm/glm.hpp>
 #include "Texture.h"
 
 class Shader;
+
+enum class PrincipalDirection
+{
+    Dir1 = 0,
+    Dir2 = 1
+};
 
 // Material names follow ../Raytracer/phong_shader.h.
 struct Material
@@ -14,8 +21,18 @@ struct Material
     glm::vec3 color_specular{0.5f};
     float specular_power = 32.0f;
 
+    // Texture pointers are owned by Object and released in its destructor.
     Texture * texture = nullptr;
+    std::array<Texture *, 2> licTextures{}; // Baked UV LIC textures indexed by principal direction.
+    // Triplanar LIC maps per direction, with projections ordered +X, -X, +Y, -Y, +Z, -Z.
+    std::array<std::array<Texture *, 6>, 2> triplanarLICTextures{};
+    PrincipalDirection principalDirection = PrincipalDirection::Dir1; // default direction for LIC sampling
     float noise_scale = 1.0f;
+    float licBias = 0.5f; // Post-LIC intensity remap: 0.5 is neutral; higher brightens, lower darkens.
+    float licGain = 0.75f; // Post-LIC contrast remap: 0.5 is neutral; higher adds contrast, lower softens.
+    bool useMeshTextureCoordinates = false; // Sample noise using the mesh's imported OBJ UVs.
+    bool useTriplanarNoise = false; // Blend axis-projected noise for meshes without usable UVs.
+    bool useLIC = false; // Select LIC instead of the original Perlin noise.
 };
 
 // Adapted from ../Raytracer/object.h for rasterized objects.
@@ -23,11 +40,20 @@ class Object
 {
   public:
     Shader *material_shader = nullptr; // Non-owning; shader must outlive the object.
+    Shader *direction_shader = nullptr; // Non-owning flat-color shader for normal and curvature lines.
     int number_parts = 1;
     Material material;
     // Converts normalized mesh coordinates to world space for this scene instance.
     glm::mat4 model{1.0f};
-    virtual ~Object() = default;
+    virtual ~Object()
+    {
+        delete material.texture;
+        for (Texture *texture : material.licTextures)
+            delete texture;
+        for (const auto &directionTextures : material.triplanarLICTextures)
+            for (Texture *texture : directionTextures)
+                delete texture;
+    }
     // Geometry submission only; Render_World binds the shader and uniforms first.
     virtual void Draw() const = 0;
     virtual void DrawVertexNormals() const = 0;

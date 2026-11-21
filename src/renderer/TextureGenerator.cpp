@@ -1,53 +1,143 @@
 #include "TextureGenerator.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <glm/glm.hpp>
 #include <random>
+#include <stdexcept>
+#include <vector>
 
 namespace
 {
-const int gradientGridSize = 256; //expanded grid size to account for fractal noise layers
-//this is a 2D array of unit vectors that will be used to generate the noise texture.
-glm::vec2 gradientGrid[gradientGridSize][gradientGridSize];
+  const int gradientGridSize = 256; //expanded grid size to account for fractal noise layers
+  //this is a 2D array of unit vectors that will be used to generate the noise texture.
+  glm::vec2 gradientGrid[gradientGridSize][gradientGridSize];
 
-float perlinNoise(float x, float y)
-{
-    // multiplying by base gradient size = 6 to scale x,y to corresponding gradient coordinates
-    // gradient size scaling per noise layer implicitly handled by x, y scaling on input
-    float x_grad = x * 6; 
-    float y_grad = y * 6; 
-    int left = static_cast<int>(std::floor(x_grad));
-    int right = static_cast<int>(std::floor(x_grad)) + 1;
-    int top = static_cast<int>(std::floor(y_grad));
-    int bottom = static_cast<int>(std::floor(y_grad)) + 1;
+  float perlinNoise(float x, float y)
+  {
+      // multiplying by base gradient size = 6 to scale x,y to corresponding gradient coordinates
+      // gradient size scaling per noise layer implicitly handled by x, y scaling on input
+      float x_grad = x * 6;
+      float y_grad = y * 6;
+      int left = static_cast<int>(std::floor(x_grad));
+      int right = static_cast<int>(std::floor(x_grad)) + 1;
+      int top = static_cast<int>(std::floor(y_grad));
+      int bottom = static_cast<int>(std::floor(y_grad)) + 1;
 
-    glm::vec2 topLeftVal = gradientGrid[top][left];
-    glm::vec2 topRightVal = gradientGrid[top][right];
-    glm::vec2 bottomLeftVal = gradientGrid[bottom][left];
-    glm::vec2 bottomRightVal = gradientGrid[bottom][right];
+      glm::vec2 topLeftVal = gradientGrid[top][left];
+      glm::vec2 topRightVal = gradientGrid[top][right];
+      glm::vec2 bottomLeftVal = gradientGrid[bottom][left];
+      glm::vec2 bottomRightVal = gradientGrid[bottom][right];
 
-    glm::vec2 topLeftVec = glm::vec2(x_grad, y_grad) - glm::vec2(left, top);
-    glm::vec2 topRightVec = glm::vec2(x_grad, y_grad) - glm::vec2(right, top);
-    glm::vec2 bottomLeftVec = glm::vec2(x_grad, y_grad) - glm::vec2(left, bottom);
-    glm::vec2 bottomRightVec = glm::vec2(x_grad, y_grad) - glm::vec2(right, bottom);
+      glm::vec2 topLeftVec = glm::vec2(x_grad, y_grad) - glm::vec2(left, top);
+      glm::vec2 topRightVec = glm::vec2(x_grad, y_grad) - glm::vec2(right, top);
+      glm::vec2 bottomLeftVec = glm::vec2(x_grad, y_grad) - glm::vec2(left, bottom);
+      glm::vec2 bottomRightVec = glm::vec2(x_grad, y_grad) - glm::vec2(right, bottom);
 
-    float topLeftDot = glm::dot(topLeftVec, topLeftVal);
-    float topRightDot = glm::dot(topRightVec, topRightVal);
-    float bottomLeftDot = glm::dot(bottomLeftVec, bottomLeftVal);
-    float bottomRightDot = glm::dot(bottomRightVec, bottomRightVal);
+      float topLeftDot = glm::dot(topLeftVec, topLeftVal);
+      float topRightDot = glm::dot(topRightVec, topRightVal);
+      float bottomLeftDot = glm::dot(bottomLeftVec, bottomLeftVal);
+      float bottomRightDot = glm::dot(bottomRightVec, bottomRightVal);
 
-    // smooth step prevent grid artifacts
-    float tx = x_grad - left;
-    float smoothX = (3 * std::pow(tx, 2)) - (2 * std::pow(tx, 3));
-    float ty = y_grad - top;
-    float smoothY = (3 * std::pow(ty, 2)) - (2 * std::pow(ty, 3));
-    float lerpTopDots = (topLeftDot * (1 - smoothX)) + (topRightDot * smoothX);
-    float lerpBottomDots = (bottomLeftDot * (1 - smoothX)) + (bottomRightDot * smoothX);
-    float blerp = (lerpTopDots * (1 - smoothY)) + (lerpBottomDots * smoothY);
-    
-    return blerp;
-}
+      // smooth step prevent grid artifacts
+      float tx = x_grad - left;
+      float smoothX = (3 * std::pow(tx, 2)) - (2 * std::pow(tx, 3));
+      float ty = y_grad - top;
+      float smoothY = (3 * std::pow(ty, 2)) - (2 * std::pow(ty, 3));
+      float lerpTopDots = (topLeftDot * (1 - smoothX)) + (topRightDot * smoothX);
+      float lerpBottomDots = (bottomLeftDot * (1 - smoothX)) + (bottomRightDot * smoothX);
+      float blerp = (lerpTopDots * (1 - smoothY)) + (lerpBottomDots * smoothY);
+
+      return blerp;
+  }
+
+  float sampleScalar(const std::vector<float> &values, int size, glm::vec2 point)
+  {
+      point = glm::clamp(point, glm::vec2(0.0f), glm::vec2(static_cast<float>(size - 1)));
+      const int x0 = static_cast<int>(std::floor(point.x));
+      const int y0 = static_cast<int>(std::floor(point.y));
+      const int x1 = std::min(x0 + 1, size - 1);
+      const int y1 = std::min(y0 + 1, size - 1);
+      const float tx = point.x - x0;
+      const float ty = point.y - y0;
+      const float top = glm::mix(values[y0 * size + x0], values[y0 * size + x1], tx);
+      const float bottom = glm::mix(values[y1 * size + x0], values[y1 * size + x1], tx);
+      return glm::mix(top, bottom, ty);
+  }
+
+  glm::vec2 sampleDirection(const std::vector<glm::vec2> &field, int size, glm::vec2 point)
+  {
+      if (point.x < 0.0f || point.y < 0.0f ||
+          point.x > static_cast<float>(size - 1) ||
+          point.y > static_cast<float>(size - 1))
+          return glm::vec2(0.0f);
+
+      const int x0 = static_cast<int>(std::floor(point.x));
+      const int y0 = static_cast<int>(std::floor(point.y));
+      const int x1 = std::min(x0 + 1, size - 1);
+      const int y1 = std::min(y0 + 1, size - 1);
+      const float tx = point.x - x0;
+      const float ty = point.y - y0;
+      const glm::vec2 reference = field[y0 * size + x0];
+      if (glm::length(reference) < 1e-6f)
+          return glm::vec2(0.0f);
+
+      glm::vec2 sum(0.0f);
+      const int xs[4] = {x0, x1, x0, x1};
+      const int ys[4] = {y0, y0, y1, y1};
+      const float weights[4] = {
+          (1.0f - tx) * (1.0f - ty), tx * (1.0f - ty),
+          (1.0f - tx) * ty, tx * ty};
+      for (int i = 0; i < 4; ++i)
+      {
+          glm::vec2 direction = field[ys[i] * size + xs[i]];
+          if (glm::dot(direction, reference) < 0.0f)
+              direction = -direction;
+          sum += weights[i] * direction;
+      }
+
+      const float length = glm::length(sum);
+      return length > 1e-6f ? sum / length : glm::vec2(0.0f);
+  }
+
+  void traceLIC(const std::vector<float> &source, const std::vector<glm::vec2> &field,
+                int size, glm::vec2 start, glm::vec2 initialDirection, float sign,
+                float &sum, float &weightSum)
+  {
+      constexpr int traceLength = 16;
+      glm::vec2 position = start;
+      glm::vec2 previousDirection = sign * initialDirection;
+      for (int step = 1; step <= traceLength; ++step)
+      {
+          glm::vec2 direction = sampleDirection(field, size, position);
+          if (glm::length(direction) < 1e-6f)
+              break;
+          if (glm::dot(direction, previousDirection) < 0.0f)
+              direction = -direction;
+
+          const glm::vec2 midpoint = position + 0.5f * direction;
+          glm::vec2 midpointDirection = sampleDirection(field, size, midpoint);
+          if (glm::length(midpointDirection) < 1e-6f)
+              break;
+          if (glm::dot(midpointDirection, direction) < 0.0f)
+              midpointDirection = -midpointDirection;
+
+          position += midpointDirection;
+          if (position.x < 0.0f || position.y < 0.0f ||
+              position.x > static_cast<float>(size - 1) ||
+              position.y > static_cast<float>(size - 1))
+              break;
+
+          const float normalizedDistance =
+              static_cast<float>(step) / static_cast<float>(traceLength + 1);
+          const float weight = 0.5f * (1.0f + std::cos(
+              static_cast<float>(std::acos(-1.0)) * normalizedDistance));
+          sum += weight * sampleScalar(source, size, position);
+          weightSum += weight;
+          previousDirection = midpointDirection;
+      }
+  }
 }
 
 void generateGradientGrid()
@@ -67,13 +157,16 @@ void generateGradientGrid()
 
 float ** createPerlinTexture(int size)
 {
-  float ** pixels = static_cast<float **>(malloc(size * sizeof(float *)));
+  if (size <= 0)
+    return nullptr;
+
+  float ** pixels = static_cast<float **>(malloc(static_cast<size_t>(size) * sizeof(float *)));
   if (pixels == nullptr)
     return nullptr;
 
   for (int y = 0; y < size; ++y)
   {
-    pixels[y] = static_cast<float *>(malloc(size * sizeof(float)));
+    pixels[y] = static_cast<float *>(malloc(static_cast<size_t>(size) * sizeof(float)));
     if (pixels[y] == nullptr)
     {
       for (int allocatedRow = 0; allocatedRow < y; ++allocatedRow)
@@ -91,9 +184,7 @@ float ** createPerlinTexture(int size)
   for (int y = 0; y < size; ++y)
   {
     for (int x = 0; x < size; ++x)
-    {
-      pixels[y][x] = 0;
-    }
+      pixels[y][x] = 0.0f;
   }
   for (int i = 0; i < 4; i++) { // iterate multiple times for fractal noise
     for (int y = 0; y < size; ++y)
@@ -117,5 +208,74 @@ float ** createPerlinTexture(int size)
         pixels[y][x] = 0.5f * ((pixels[y][x] / total_amp) + 1.0f);
       }
     }
+  return pixels;
+}
+
+std::vector<float> createLineIntegralConvolutionTexture(
+    int size, const std::vector<float> &source,
+    const std::vector<glm::vec2> &directionField)
+{
+  if (size <= 0 || source.size() != static_cast<size_t>(size) * size ||
+      directionField.size() != source.size())
+    throw std::invalid_argument("LIC input dimensions do not match");
+
+  std::vector<float> result = source;
+  for (int y = 0; y < size; ++y)
+  {
+    for (int x = 0; x < size; ++x)
+    {
+      const size_t index = static_cast<size_t>(y) * size + x;
+      glm::vec2 direction = directionField[index];
+      const float directionLength = glm::length(direction);
+      if (directionLength < 1e-6f)
+        continue;
+      direction /= directionLength;
+
+      float sum = source[index];
+      float weightSum = 1.0f;
+      traceLIC(source, directionField, size, glm::vec2(x, y), direction, 1.0f,
+               sum, weightSum);
+      traceLIC(source, directionField, size, glm::vec2(x, y), direction, -1.0f,
+               sum, weightSum);
+      result[index] = sum / weightSum;
+    }
+  }
+  return result;
+}
+
+float ** createLineIntegralConvolutionTexture(
+    int size, float ** source, const std::vector<glm::vec2> &directionField)
+{
+  if (size <= 0 || source == nullptr)
+    throw std::invalid_argument("LIC source texture is invalid");
+
+  std::vector<float> sourceValues(static_cast<size_t>(size) * size);
+  for (int y = 0; y < size; ++y)
+  {
+    if (source[y] == nullptr)
+      throw std::invalid_argument("LIC source texture contains a null row");
+    for (int x = 0; x < size; ++x)
+      sourceValues[static_cast<size_t>(y) * size + x] = source[y][x];
+  }
+  const std::vector<float> values =
+      createLineIntegralConvolutionTexture(size, sourceValues, directionField);
+
+  float ** pixels = static_cast<float **>(malloc(static_cast<size_t>(size) * sizeof(float *)));
+  if (pixels == nullptr)
+    return nullptr;
+
+  for (int y = 0; y < size; ++y)
+  {
+    pixels[y] = static_cast<float *>(malloc(static_cast<size_t>(size) * sizeof(float)));
+    if (pixels[y] == nullptr)
+    {
+      for (int allocatedRow = 0; allocatedRow < y; ++allocatedRow)
+        free(pixels[allocatedRow]);
+      free(pixels);
+      return nullptr;
+    }
+    for (int x = 0; x < size; ++x)
+      pixels[y][x] = values[static_cast<size_t>(y) * size + x];
+  }
   return pixels;
 }
