@@ -1,4 +1,5 @@
 #pragma once
+#include "KubelkaMunkCore.h"
 #include <array>
 #include <glm/glm.hpp>
 #include <vector>
@@ -11,18 +12,10 @@ constexpr int spectralBands = 10;
 using Spectrum = std::array<float, spectralBands>;
 
 // Same as Pigment in KubelkaMunk.h, with K and S given per wavelength band
-struct SpectralPigment
-{
-    Spectrum K; // absorption coefficient
-    Spectrum S; // scattering coefficient
-};
+using SpectralPigment = kmcore::Pigment<Spectrum>;
 
-// One layer of paint: which pigment, and how thick
-struct SpectralLayer
-{
-    SpectralPigment pigment;
-    float thickness; // 0 means no paint, larger values mean thicker paint
-};
+// Same as Layer in KubelkaMunk.h, with a spectral pigment
+using SpectralLayer = kmcore::Layer<Spectrum>;
 
 // Same as layerFromMix in KubelkaMunk.h, computed per wavelength band
 // Throws std::invalid_argument if parts is empty
@@ -48,12 +41,8 @@ Spectrum spectrumFromRGB(const glm::vec3 &color);
 // Lower-level steps used by colorFromSpectralLayers
 //===----------------------------------------------------------------------===//
 
-// Reflectance and transmittance per wavelength band
-struct SpectralReflectTransmit
-{
-    Spectrum R; // reflectance
-    Spectrum T; // transmittance
-};
+// Same as ReflectTransmit in KubelkaMunk.h, per wavelength band
+using SpectralReflectTransmit = kmcore::ReflectTransmit<Spectrum>;
 
 // Computes R and T for one layer of paint
 SpectralReflectTransmit computeSpectralLayer(const SpectralLayer &layer);

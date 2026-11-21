@@ -1,9 +1,8 @@
 #include "KubelkaMunkSpectral.h"
-#include <cmath>
-#include <stdexcept>
 
 namespace
 {
+// Anonymous namespace for internal use within this file
 
 // Each row turns the 10 band values into one RGB channel
 // Built from the CIE 1931 2-degree colour-matching functions under an equal-energy light, converted to linear sRGB
@@ -31,8 +30,8 @@ Spectrum combine(float a, const Spectrum &x, float b, const Spectrum &y, float c
         result[band] = a * x[band] + b * y[band] + c * z[band];
     return result;
 }
-
-} // namespace
+// namespace
+} 
 
 Spectrum spectrumFromRGB(const glm::vec3 &color)
 {
@@ -67,74 +66,32 @@ glm::vec3 rgbFromSpectrum(const Spectrum &spectrum)
     return rgb;
 }
 
-// The formulas below are the same as in KubelkaMunk.cpp, applied to each wavelength band instead of each RGB channel
-
 SpectralReflectTransmit computeSpectralLayer(const SpectralLayer &layer)
 {
-    SpectralReflectTransmit result;
-    for (int band = 0; band < spectralBands; band++)
-    {
-        float K = layer.pigment.K[band];
-        float S = layer.pigment.S[band];
-        float a = (S + K) / S;
-        float b = std::sqrt(a * a - 1.0f);
-        float bSx = b * S * layer.thickness;
-        float c = a * std::sinh(bSx) + b * std::cosh(bSx);
-        // R = sinh(bSx) / c, rewritten with tanh because sinh and cosh overflow for thick layers
-        float t = std::tanh(bSx);
-        result.R[band] = t / (a * t + b);
-        result.T[band] = b / c;
-    }
-    return result;
+    return kmcore::computeLayer(layer);
 }
 
 SpectralReflectTransmit stackSpectralLayers(const SpectralReflectTransmit &top, const SpectralReflectTransmit &bottom)
 {
-    SpectralReflectTransmit result;
-    for (int band = 0; band < spectralBands; band++)
-    {
-        float bounce = 1.0f - top.R[band] * bottom.R[band];
-        result.R[band] = top.R[band] + top.T[band] * top.T[band] * bottom.R[band] / bounce;
-        result.T[band] = top.T[band] * bottom.T[band] / bounce;
-    }
-    return result;
+    return kmcore::stackLayers(top, bottom);
 }
 
 SpectralLayer spectralLayerFromMix(const std::vector<SpectralLayer> &parts)
 {
-    if (parts.empty())
-        throw std::invalid_argument("spectralLayerFromMix needs at least one part");
-    SpectralLayer mixed = {};
-    for (const SpectralLayer &part : parts)
-    {
-        for (int band = 0; band < spectralBands; band++)
-        {
-            mixed.pigment.K[band] += part.pigment.K[band] * part.thickness;
-            mixed.pigment.S[band] += part.pigment.S[band] * part.thickness;
-        }
-        mixed.thickness += part.thickness;
-    }
-
-    // With no paint at all, keep the first pigment so that S is never 0
-    if (mixed.thickness <= 0.0f)
-        return {parts[0].pigment, 0.0f};
-    for (int band = 0; band < spectralBands; band++)
-    {
-        mixed.pigment.K[band] /= mixed.thickness;
-        mixed.pigment.S[band] /= mixed.thickness;
-    }
-    return mixed;
+    return kmcore::layerFromMix(parts);
 }
 
 glm::vec3 colorFromSpectralLayers(const std::vector<SpectralLayer> &layers, const glm::vec3 &paperColor)
 {
-    // Start with bare paper: it reflects its own color and lets no light through
+    // Start with bare paper: it reflects its own spectrum and lets no light through
     SpectralReflectTransmit stack;
     stack.R = spectrumFromRGB(paperColor);
     stack.T.fill(0.0f);
 
+    // Put each layer of paint on top of everything below it
     for (const SpectralLayer &layer : layers)
         stack = stackSpectralLayers(computeSpectralLayer(layer), stack);
 
+    // The final color is the reflectance of the whole stack, converted to RGB
     return rgbFromSpectrum(stack.R);
 }
