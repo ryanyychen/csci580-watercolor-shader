@@ -1,4 +1,5 @@
 #pragma once
+#include "KubelkaMunkCore.h"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -7,18 +8,11 @@
 // K, S, R, and T are defined per wavelength of light;
 // Here they are approximated with red, green, and blue, so each is a vec3 with one value per color channel
 
-struct Pigment
-{
-    glm::vec3 K; // absorption coefficient: how strongly the pigment absorbs light; absorbed light is lost, lowering both R and T
-    glm::vec3 S; // scattering coefficient: how strongly the pigment scatters light back up; this raises R and lowers T
-};
+// A pigment: K (absorption coefficient) and S (scattering coefficient)
+using Pigment = kmcore::Pigment<glm::vec3>;
 
-// One layer of paint: which pigment, and how thick
-struct Layer
-{
-    Pigment pigment;
-    float thickness; // 0 means no paint, larger values mean thicker paint
-};
+// One layer of paint: which pigment, and how thick (thickness)
+using Layer = kmcore::Layer<glm::vec3>;
 
 // A pigment with a human-readable name, used for palette entries
 struct NamedPigment
@@ -57,12 +51,8 @@ glm::vec3 colorFromLayers(const std::vector<Layer> &layers, const glm::vec3 &pap
 // Lower-level steps used by colorFromLayers
 //===----------------------------------------------------------------------===//
 
-// How much light is reflected and transmitted, by one layer or by several layers stacked together
-struct ReflectTransmit
-{
-    glm::vec3 R; // reflectance: fraction (0 to 1) of light the layer reflects back
-    glm::vec3 T; // transmittance: fraction (0 to 1) of light that passes through the layer
-};
+// How much light is reflected (R) and transmitted (T), by one layer or by several layers stacked together
+using ReflectTransmit = kmcore::ReflectTransmit<glm::vec3>;
 
 // Computes R and T for one layer of paint
 ReflectTransmit computeLayer(const Layer &layer);
