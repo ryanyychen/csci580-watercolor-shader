@@ -57,7 +57,20 @@ glm::vec3 color = colorFromLayers({{blue, 0.5f}, {yellow, 0.3f}}, paperColor);
 ```
 
 `layerFromMix` mixes several pigments into one layer, as in wet-in-wet painting.
-Neither the simulation nor the watercolor shader uses this module yet.
+
+[src/renderer/KubelkaMunkMeasured.h](src/renderer/KubelkaMunkMeasured.h) offers the same
+functions with pigments measured at 36 wavelengths (Okumura 2005), so mixes follow the
+real pigments more closely, for example ultramarine versus phthalo blue mixed with yellow.
+
+```cpp
+MeasuredPigment blue = measuredPigmentFromName("Ultramarine Blue");
+glm::vec3 color = colorFromMeasuredLayers({{blue, 0.5f}}, paperColor);
+```
+
+The measured data comes from the
+[painting_tools](https://github.com/rubenwiersma/painting_tools) repository and is shared
+under CC BY-NC-SA 4.0. 
+Neither the simulation nor the watercolor shader uses these modules yet.
 
 | File | What it controls |
 | --- | --- |
@@ -78,6 +91,8 @@ Neither the simulation nor the watercolor shader uses this module yet.
 | [src/renderer/Image_Output.cpp](src/renderer/Image_Output.cpp) | Write the rendered framebuffer to a P3 PPM image. |
 | [src/renderer/WatercolorSim.cpp](src/renderer/WatercolorSim.cpp) | Physical watercolor simulation: paper grid, wet area, water, and pigment. |
 | [src/renderer/KubelkaMunk.cpp](src/renderer/KubelkaMunk.cpp) | Kubelka-Munk pigment colors: turns layers of pigment over paper into the final RGB color. |
+| [src/renderer/KubelkaMunkMeasured.cpp](src/renderer/KubelkaMunkMeasured.cpp) | The same, computed per wavelength with measured pigment data. |
+| [src/renderer/KubelkaMunkCore.h](src/renderer/KubelkaMunkCore.h) | Kubelka-Munk formulas shared by both versions. |
 
 For meshes with complete OBJ UVs within one tile, the watercolor pass builds both a Perlin
 texture and a `dir1`-aligned LIC version from the same source. Press **L** to
