@@ -1,4 +1,6 @@
 #include "KubelkaMunkSpectral.h"
+#include "KubelkaMunk.h"
+#include <algorithm>
 
 namespace
 {
@@ -64,6 +66,37 @@ glm::vec3 rgbFromSpectrum(const Spectrum &spectrum)
         for (int band = 0; band < spectralBands; band++)
             rgb[ch] += spectrumToRGBMatrix[ch][band] * spectrum[band];
     return rgb;
+}
+
+SpectralPigment spectralPigmentFromName(const std::string &name)
+{
+    // Colors of the RGB pigment at thickness 1 over white and over black paper
+    Pigment pigment = pigmentFromName(name);
+    glm::vec3 onWhite = colorFromLayers({{pigment, 1.0f}}, glm::vec3(1.0f));
+    glm::vec3 onBlack = colorFromLayers({{pigment, 1.0f}}, glm::vec3(0.0f));
+    return spectralPigmentFromColors(onWhite, onBlack);
+}
+
+SpectralPigment spectralPigmentFromColors(const glm::vec3 &onWhite, const glm::vec3 &onBlack)
+{
+    // Converted spectra can be 0, slightly above 1, or brighter over black than over white in some bands,
+    // so each band is clamped before solving for K and S
+    Spectrum white = spectrumFromRGB(onWhite);
+    Spectrum black = spectrumFromRGB(onBlack);
+    for (int band = 0; band < spectralBands; band++)
+    {
+        white[band] = std::clamp(white[band], 0.01f, 0.99f);
+        black[band] = std::clamp(black[band], 0.005f, 0.99f * white[band]);
+    }
+    return kmcore::pigmentFromColors(white, black);
+}
+
+SpectralPigment spectralPigmentFromRGB(const glm::vec3 &color, float opacity)
+{
+    // onWhite = color, onBlack = color * opacity, as in pigmentFromRGB
+    glm::vec3 onWhite = glm::clamp(color, 0.01f, 0.99f);
+    glm::vec3 onBlack = onWhite * glm::clamp(opacity, 0.01f, 0.99f);
+    return spectralPigmentFromColors(onWhite, onBlack);
 }
 
 SpectralReflectTransmit computeSpectralLayer(const SpectralLayer &layer)

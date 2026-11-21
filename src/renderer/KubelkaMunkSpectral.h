@@ -2,6 +2,7 @@
 #include "KubelkaMunkCore.h"
 #include <array>
 #include <glm/glm.hpp>
+#include <string>
 #include <vector>
 
 // Spectral version of the Kubelka-Munk color model
@@ -16,6 +17,17 @@ using SpectralPigment = kmcore::Pigment<Spectrum>;
 
 // Same as Layer in KubelkaMunk.h, with a spectral pigment
 using SpectralLayer = kmcore::Layer<Spectrum>;
+
+// Same as pigmentFromName in KubelkaMunk.h, converted to a spectral pigment
+// Throws std::invalid_argument if there is no pigment with that name
+SpectralPigment spectralPigmentFromName(const std::string &name);
+
+// Same as pigmentFromColors in KubelkaMunk.h, solved per wavelength band
+// Band values are clamped so that 0 < onBlack < onWhite < 1 holds in every band
+SpectralPigment spectralPigmentFromColors(const glm::vec3 &onWhite, const glm::vec3 &onBlack);
+
+// Same as pigmentFromRGB in KubelkaMunk.h
+SpectralPigment spectralPigmentFromRGB(const glm::vec3 &color, float opacity = 0.3f);
 
 // Same as layerFromMix in KubelkaMunk.h, computed per wavelength band
 // Throws std::invalid_argument if parts is empty
