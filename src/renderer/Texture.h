@@ -2,6 +2,8 @@
 #define TEXTURE_H
 
 #include <glad/gl.h>
+#include <glm/glm.hpp>
+#include <vector>
 
 /*helper class for managing OpenGL textures,
   there are several ways to initialize a texture 
@@ -17,6 +19,9 @@ public:
   Texture(int width, int height, const char * pixels);
   //many of our noise textures are generated as float values, so we can also initialize a texture from a 2D array of floats
   Texture(int width, int height, const float * const * values);
+  // Floating-point linear RGB, for pigment lookups rather than grayscale noise.
+  // Values are not clamped or gamma-encoded during upload.
+  Texture(int width, int height, const std::vector<glm::vec3> &colors);
   ~Texture();
 
   Texture(const Texture &) = delete;
@@ -29,7 +34,8 @@ public:
   GLuint GetId() const;
 
 private:
-  void Initialize(const void * pixels);
+  void Initialize(const void * pixels, GLint internalFormat = GL_R8,
+                  GLenum format = GL_RED, GLenum type = GL_UNSIGNED_BYTE);
 
   int width;
   int height;

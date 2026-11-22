@@ -1,6 +1,8 @@
 #include "renderer/Render_World.h"
 #include "renderer/Image_Output.h"
 #include "renderer/Mesh.h"
+#include "renderer/ModeLabel.h"
+#include "renderer/PigmentLookup.h"
 #include "renderer/Shader.h"
 #include "renderer/TextureGenerator.h"
 #include "renderer/WatercolorSim.h"
@@ -63,6 +65,25 @@ enum class ShaderType {
 };
 
 ShaderType currentShader = ShaderType::Phong;
+
+// Keep the on-screen label and window title tied to the actual active mode.
+std::string shaderModeLabel(const Render_World &world)
+{
+    switch (currentShader)
+    {
+    case ShaderType::Phong:
+        return world.show_normals ? "MODE 1/3: PHONG - NORMALS" : "MODE 1/3: PHONG";
+    case ShaderType::CurveMap:
+        return "MODE 2/3: CURVATURE";
+    case ShaderType::Watercolor:
+        if (!world.objects.empty() && world.objects.front()->material.useLIC)
+            return std::string("MODE 3/3: WATERCOLOR KM - LIC DIR ") +
+                   (world.objects.front()->material.principalDirection == PrincipalDirection::Dir1
+                        ? "1" : "2");
+        return "MODE 3/3: WATERCOLOR KM - PERLIN";
+    }
+    return "MODE UNKNOWN";
+}
 
 void createShaders(const std::filesystem::path &resources) {
     phongShader = new Shader(resources / "shaders/phong.vert", resources / "shaders/phong.frag");
@@ -176,6 +197,9 @@ void scroll(GLFWwindow *window, double, double y)
 
 bool paperOverlayEnabled(const Render_World &world)
 {
+    // Keep the comparison modes free of the watercolor paper treatment.
+    if (currentShader != ShaderType::Watercolor)
+        return false;
     for (const auto &object : world.objects)
     {
         if (object && object->material.useLIC)
@@ -219,10 +243,22 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     mesh->direction_shader = directionShader;
 
     // Scene setup: object material, world lights, and camera.
-    mesh->material.color_ambient = glm::vec3(0.02f, 0.02f, 0.8f);
-    mesh->material.color_diffuse = glm::vec3(0.8f, 0.02f, 0.02f);
-    mesh->material.color_specular = glm::vec3(1.0f);
-    mesh->material.specular_power = 64.0f;
+    // Copper diffuse/ambient with a neutral highlight makes the three Phong
+    // contributions readable without an unrelated blue tint in shadowed regions.
+    mesh->material.color_diffuse = glm::vec3(0.45f, 0.16f, 0.06f);
+    mesh->material.color_ambient = mesh->material.color_diffuse;
+    mesh->material.color_specular = glm::vec3(0.60f);
+    mesh->material.specular_power = 48.0f;
+
+    // Bake a fixed measured pigment over fixed paper on the CPU. To use a fixed
+    // mixture, replace pigment with measuredLayerFromMix(...).pigment here.
+    // Changing either pigment or paper requires rebuilding this table.
+    const MeasuredPigment pigment = measuredPigmentFromName("Ultramarine Blue");
+    const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
+    const auto pigmentColors = createMeasuredPigmentLookup(
+        pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
+    mesh->material.pigmentLookup =
+        new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
     
     // generate noise textures for watercolor shading
     generateGradientGrid();
@@ -275,9 +311,14 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     }
 
     world.objects.push_back(std::move(mesh));
-    world.lights.front().position = glm::vec3(3.0f, 4.0f, 4.0f);
-    world.lights.front().color = glm::vec3(0.3f);
-    world.ambient_intensity = 0.12f;
+    // An off-axis white key light gives a clear lit-to-shadow transition.
+    // Keep its strength below one so the highlight retains headroom.
+    world.lights.front().position = glm::vec3(-3.0f, 4.0f, 5.0f);
+    world.lights.front().color = glm::vec3(1.0f);
+    world.lights.front().intensity = 0.85f;
+    world.ambient_color = glm::vec3(1.0f);
+    world.ambient_intensity = 0.10f;
+    world.background_color = glm::vec3(0.91f, 0.93f, 0.95f);
 
     // setup paper texture overlay
     const int paperSize = 256;
@@ -293,6 +334,9 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     glGenVertexArrays(1, &paperVAO);
     if (paperVAO == 0)
         throw std::runtime_error("Failed to create paper overlay VAO");
+
+    ModeLabel modeLabel;
+    std::string previousModeLabel;
 
     // Register callbacks after their input state and scene are ready.
     Input state;
@@ -323,6 +367,19 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         world.Render(width, height);
         if (paperOverlayEnabled(world))
             drawPaperOverlay(*paperShader, paperTexture, paperVAO, 0.20f);
+
+        // Render the mode label last so it stays legible and is included in exports.
+        const std::string label = shaderModeLabel(world);
+        if (label != previousModeLabel)
+        {
+            glfwSetWindowTitle(window, ("Watercolor | " + label + " | Space: next shader").c_str());
+            previousModeLabel = label;
+        }
+        int windowWidth = 0, windowHeight = 0;
+        glfwGetWindowSize(window, &windowWidth, &windowHeight);
+        const float pixelScale =
+            windowWidth > 0 ? static_cast<float>(width) / windowWidth : 1.0f;
+        modeLabel.Draw(*directionShader, label, width, height, pixelScale);
 
         if (!outputPath.empty() && frames == 0)
             saveScreenshot(world.camera, outputPath);

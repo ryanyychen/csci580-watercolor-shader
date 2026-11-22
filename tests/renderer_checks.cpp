@@ -1,6 +1,7 @@
 #include "renderer/Camera.h"
 #include "renderer/Image_Output.h"
 #include "renderer/TextureGenerator.h"
+#include "renderer/PigmentLookup.h"
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -117,7 +118,51 @@ int main()
             textureSize, stripeNoise, horizontalField);
         require(unchanged == stripeNoise, "LIC changed noise outside the direction field");
 
-        std::cout << "Camera, PPM, and LIC checks passed\n";
+        const glm::vec3 paperColor(0.96f, 0.94f, 0.88f);
+        const MeasuredPigment blue = measuredPigmentFromName("Ultramarine Blue");
+        const MeasuredPigment yellow = measuredPigmentFromName("Hansa Yellow Opaque");
+        const MeasuredPigment mixture = measuredLayerFromMix({{blue, 0.7f}, {yellow, 0.3f}}).pigment;
+        constexpr int lookupSize = 1024;
+        constexpr float maximumThickness = 3.0f;
+        for (const MeasuredPigment &pigment : {blue, mixture})
+        {
+            const auto lookup = createMeasuredPigmentLookup(
+                pigment, paperColor, lookupSize, maximumThickness);
+            require(lookup.size() == lookupSize, "Wrong pigment lookup size");
+            require(glm::length(lookup.front() - paperColor) < 1e-5f,
+                    "Zero-thickness lookup sample must return paper");
+            const auto thick = colorFromMeasuredLayers({{pigment, maximumThickness}}, paperColor);
+            require(glm::length(lookup.back() - thick) < 1e-6f,
+                    "Final lookup sample does not match spectral KM");
+
+            // Emulate the shader's texel-center sampling and linear interpolation.
+            // Non-grid thicknesses must remain close to the direct 36-band result.
+            for (float fraction : {0.0001f, 0.073f, 0.437f, 0.913f})
+            {
+                const float sample = fraction * (lookupSize - 1);
+                const auto left = static_cast<size_t>(sample);
+                const auto interpolated = glm::mix(lookup[left], lookup[left + 1], sample - left);
+                const auto direct = colorFromMeasuredLayers(
+                    {{pigment, fraction * maximumThickness}}, paperColor);
+                require(glm::length(interpolated - direct) < 1e-3f,
+                        "Pigment lookup interpolation differs from spectral KM");
+            }
+            for (const auto &color : lookup)
+                for (int channel = 0; channel < 3; ++channel)
+                    require(std::isfinite(color[channel]), "Non-finite pigment lookup color");
+        }
+        bool invalidLookupRejected = false;
+        try
+        {
+            createMeasuredPigmentLookup(blue, paperColor, 1, maximumThickness);
+        }
+        catch (const std::invalid_argument &)
+        {
+            invalidLookupRejected = true;
+        }
+        require(invalidLookupRejected, "Pigment lookup accepted fewer than two samples");
+
+        std::cout << "Camera, PPM, LIC, and spectral pigment lookup checks passed\n";
         return 0;
     }
     catch (const std::exception &error)

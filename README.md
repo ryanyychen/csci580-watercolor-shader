@@ -2,29 +2,80 @@
 
 ## Project summary
 
-A Computer Graphics final project comparing stylistic watercolor shading with
-physical water/pigment simulation on shared 3D scenes. The current implementation
-is a C++/OpenGL OBJ viewer with Phong lighting, camera controls, and PPM image output.
-Both watercolor methods are planned; instructor approval of the proposed
-image-space physical simulation is still pending.
+A Computer Graphics final project exploring stylistic watercolor rendering and
+physical water/pigment simulation. The C++/OpenGL OBJ viewer supports Phong lighting,
+curvature visualization, and three watercolor views using measured pigment colors.
+It includes camera controls, an on-screen mode label, and PPM image output.
+
+The physical simulation currently runs separately on a flat 2D paper grid. It is
+not yet connected to the 3D model or the viewer's watercolor shader.
+
+## Five viewing options
+
+There are **five visual options**, implemented with three mesh shader programs:
+Phong, curvature, and watercolor. Perlin and the two LIC directions are settings
+of the same watercolor shader.
+
+| Option | What you see | How to select it |
+| --- | --- | --- |
+| **1. Phong** | Copper material with ambient, diffuse, and specular lighting; the baseline for checking shape and illumination. | Starting view; **Space** cycles back to it. |
+| **2. Curvature** | Deep blue for low bending, approaching white for strong bending. Uses the larger absolute principal curvature, so inward and outward bending can look the same. | **Space** to curvature. |
+| **3. Watercolor: Perlin** | Irregular pigment variation from Perlin noise, with more pigment in shaded regions. | **Space** to watercolor; use **L** to select Perlin if LIC is active. |
+| **4. Watercolor: LIC direction 1** | Pigment streaks following the first principal curvature direction. | In watercolor, use **L** to enable LIC, then **1**. |
+| **5. Watercolor: LIC direction 2** | The same watercolor treatment, with streaks following the second principal curvature direction. | With LIC active, press **2**. |
+
+**Space cycles Phong → Curvature → Watercolor → Phong.** It does not cycle through
+all five options individually. **L** switches Perlin/LIC within watercolor, and
+**1 / 2** select the LIC direction. The on-screen label and window title identify
+the active view. **C** overlays principal direction lines for inspection.
+
+### How the views connect
+
+All five use the same mesh, camera, and transforms. Phong provides a lighting
+baseline; the watercolor shader uses its own lighting calculation to control
+pigment thickness rather than reading the Phong image.
+
+The CPU computes principal curvature values and directions when loading the mesh.
+The curvature shader displays the **values**. LIC uses the **directions** to filter
+Perlin noise into surface-aligned streaks:
+
+```text
+Mesh geometry → principal curvature calculation
+                 ├─ values → blue/white curvature view (diagnostic only)
+                 └─ directions → LIC direction 1 or 2
+Perlin noise ───────────────────→ LIC filtering
+
+Lighting + Perlin OR LIC noise → pigment thickness → measured KM lookup → watercolor color
+```
+
+The curvature image is not an input to watercolor. Perlin and both LIC views share
+the same pigment lookup and thickness calculation; they differ in the noise used
+to distribute pigment. LIC also enables the paper-grain overlay.
+These views generate a static paint appearance, not time-dependent water flow.
 
 ## Code trace
 
 Running `./watercolor "path/to/model.obj"` follows this path:
 
 ```text
-main.cpp: parse args, initialize GLFW, create the OpenGL context, and load one or more OBJ files
-  -> Shader.cpp: compile the active Phong, curvature, and watercolor shaders
-  -> Mesh.cpp: read OBJ/UVs -> triangulate -> compute normals and principal curvature -> normalize bounds
-               -> upload vertices and diagnostic buffers into GPU buffers
-  -> Render_World.cpp: pass camera, object material, lights, and the noise texture to the active shader
-  -> phong.vert / curvature.vert / watercolor.vert: transform positions and normals; watercolor also passes texture coordinates
-  -> OpenGL: rasterize triangles and interpolate per-vertex attributes
-  -> phong.frag: calculate ambient + diffuse + specular lighting
-  -> curvature.frag: color mesh regions by curvature magnitude
-  -> watercolor.frag: sample Perlin noise filtered along a principal direction in OBJ UV space
-  -> OpenGL: use depth testing to determine visible fragments in the framebuffer
-  -> main.cpp: present the rendered frame in the window
+STARTUP — once
+main.cpp                 Parse arguments; open the GLFW/OpenGL window.
+Shader.cpp               Compile the shader programs.
+Mesh.cpp                 Load/triangulate OBJ parts; center and scale the model;
+                         compute normals and curvature; upload GPU geometry.
+Mesh.cpp +
+TextureGenerator.cpp     Build Perlin noise and both curvature-aligned LIC textures.
+PigmentLookup.cpp        Bake spectral KM colors into a 1024x1 GPU lookup texture.
+
+RENDER LOOP — every frame
+main.cpp                 Handle camera controls and view selection.
+Render_World.cpp         Send transforms, lights, material, and textures to the GPU.
+Active vertex shader     Transform vertices; pass attributes to the fragment stage.
+OpenGL                   Rasterize triangles; interpolate attributes; depth-test.
+Active fragment shader   Phong lighting, curvature colors, or watercolor color.
+main.cpp + ModeLabel.cpp Draw the optional paper overlay and mode label; show frame.
+Camera.cpp +
+Image_Output.cpp         Read the framebuffer and save PPM when requested.
 ```
 
 The frame repeats as you move the camera. Passing multiple OBJ paths combines
@@ -35,24 +86,31 @@ currently share one material; OBJ/MTL colors and textures are not applied.
 Running `./watercolor --sim` runs the physical simulation instead of the viewer:
 
 ```text
-main.cpp: see --sim and skip the window (the simulation runs on the CPU)
-  -> WatercolorSim.cpp: copy the paper height field from createPaperTexture (TextureGenerator.cpp)
-  -> WatercolorSim.cpp: paint one wet circle of water and pigment
-  -> WatercolorSim.cpp: run 100 time steps of the main loop (Curtis section 4.2):
-       updateVelocities: shallow-water equations, water also runs downhill on the paper
-       relaxDivergence: even out cells where more water flows in than out
-       flowOutward: lower the pressure near the wet edge so water flows outward
-       movePigment: move the floating pigment along with the water
-  -> KubelkaMunk.cpp: color each cell as one layer of French Ultramarine over the paper
-  -> Image_Output.cpp: save paper.ppm, wet.ppm, and step000.ppm to step100.ppm in screenshots/sim/
+main.cpp                 Select the CPU simulation; skip the window.
+WatercolorSim.cpp         Generate paper heights and paint an initial wet circle.
+                         Repeat 100 steps:
+                           updateVelocities → relaxDivergence → flowOutward
+                           → movePigment
+KubelkaMunk.cpp           Convert pigment amounts to French Ultramarine over paper.
+Image_Output.cpp         Save paper.ppm, wet.ppm, and step images in screenshots/sim/.
 ```
 
 The simulation follows Curtis et al. (1997) on a 2D grid of paper cells, with water
 velocities stored on the cell edges (a staggered grid). It uses the same paper texture
 as the stylistic overlay, and its colors come from the Kubelka-Munk module. Water now
-flows and carries pigment to the edge of the stroke (edge darkening). Pigment settling
-onto the paper (granulation) and drying are next; until then, later frames keep moving
-pigment to the edge.
+flows and carries pigment within the initial wet region, accumulating pigment near
+its edge. `updateVelocities` handles motion and paper slopes; `relaxDivergence`
+reduces flow imbalance; `flowOutward` lowers pressure near the wet edge; and
+`movePigment` transports suspended pigment. The wet mask does not yet expand into
+dry cells. Settling, granulation, and drying are also unfinished, so later frames
+keep moving pigment toward the edge.
+
+Connecting this simulation to the model still requires a surface mapping (such as
+a UV atlas), seam-aware transport and surface distances, expanding water coverage,
+and live pigment-texture updates in the render loop. The watercolor shader would
+then read simulated pigment amounts instead of generating thickness from noise.
+
+### Pigment color modules
 
 Both watercolor methods can turn pigment amounts into colors with
 [src/renderer/KubelkaMunk.h](src/renderer/KubelkaMunk.h), which follows the
@@ -79,7 +137,11 @@ glm::vec3 color = colorFromMeasuredLayers({{blue, 0.5f}}, paperColor);
 The measured data comes from the
 [painting_tools](https://github.com/rubenwiersma/painting_tools) repository and is shared
 under CC BY-NC-SA 4.0. 
-The simulation uses the RGB version; the watercolor shader does not use either module yet.
+The simulation uses the RGB version. The watercolor shader samples a lookup table
+generated by the measured spectral version on the CPU; it does not evaluate the
+36-band equations in GLSL.
+
+### Where to make changes
 
 | File | What it controls |
 | --- | --- |
@@ -91,24 +153,24 @@ The simulation uses the RGB version; the watercolor shader does not use either m
 | [src/renderer/Render_World.cpp](src/renderer/Render_World.cpp) | Per-frame drawing and passing scene/material values to shader uniforms. |
 | [src/renderer/Shader.cpp](src/renderer/Shader.cpp) | GLSL compilation/linking and uniform upload helpers. |
 | [src/renderer/TextureGenerator.cpp](src/renderer/TextureGenerator.cpp) | Generates Perlin noise and line-integral-convolution filtering for the watercolor shading pass. |
-| [shaders/paper.vert](shaders/paper.vert) | Draws a fullscreen triangle and passes UV coordinates for the screen-space paper overlay. |
-| [shaders/paper.frag](shaders/paper.frag) | Samples the generated paper-height texture and tints the rendered frame with warm, visible grain. |
-| [shaders/phong.vert](shaders/phong.vert) | Standard model/view/projection transform plus inverse-transpose normal conversion. |
-| [shaders/phong.frag](shaders/phong.frag) | Ambient, diffuse, and specular Phong lighting. |
-| [shaders/curvature.vert](shaders/curvature.vert) | Passes curvature values through the pipeline for diagnostic visualization. |
-| [shaders/curvature.frag](shaders/curvature.frag) | Maps curvature magnitude to a color for the curvature visualization mode. |
-| [shaders/watercolor.vert](shaders/watercolor.vert) | Emits OBJ UVs or object-space position/normal data for triplanar noise mapping. |
-| [shaders/watercolor.frag](shaders/watercolor.frag) | Samples the noise texture to produce a paper-like watercolor tone. |
+| [src/renderer/PigmentLookup.cpp](src/renderer/PigmentLookup.cpp) | Bakes measured spectral pigment reflectance into a thickness-to-linear-RGB lookup table. |
+| [phong.vert](shaders/phong.vert), [phong.frag](shaders/phong.frag) | Transform geometry/normals and calculate ambient, diffuse, and specular lighting. |
+| [curvature.vert](shaders/curvature.vert), [curvature.frag](shaders/curvature.frag) | Pass principal curvature values to the fragment shader and map bending magnitude to blue/white. |
+| [watercolor.vert](shaders/watercolor.vert), [watercolor.frag](shaders/watercolor.frag) | Map Perlin/LIC noise onto the surface; combine it with lighting to choose thickness and sample the pigment lookup. |
+| [paper.vert](shaders/paper.vert), [paper.frag](shaders/paper.frag) | Draw a fullscreen paper-grain overlay in the LIC watercolor views. |
+| [src/renderer/ModeLabel.cpp](src/renderer/ModeLabel.cpp) | Draws the current shader mode and switching hint inside the window and screenshots. |
 | [src/renderer/Image_Output.cpp](src/renderer/Image_Output.cpp) | Write the rendered framebuffer to a P3 PPM image. |
 | [src/renderer/WatercolorSim.cpp](src/renderer/WatercolorSim.cpp) | Physical watercolor simulation: paper grid, wet area, water, and pigment. |
 | [src/renderer/KubelkaMunk.cpp](src/renderer/KubelkaMunk.cpp) | Kubelka-Munk pigment colors: turns layers of pigment over paper into the final RGB color. |
 | [src/renderer/KubelkaMunkMeasured.cpp](src/renderer/KubelkaMunkMeasured.cpp) | The same, computed per wavelength with measured pigment data. |
 | [src/renderer/KubelkaMunkCore.h](src/renderer/KubelkaMunkCore.h) | Kubelka-Munk formulas shared by both versions. |
 
-For meshes with complete OBJ UVs within one tile, the watercolor pass builds both a Perlin
-texture and a `dir1`-aligned LIC version from the same source. Press **L** to
-toggle between them while viewing the watercolor shader; the LIC view is tinted
-blue. Meshes without complete UVs use six signed-axis projections; their Perlin
+### Watercolor texture mapping and controls
+
+For meshes with complete OBJ UVs within one tile, the watercolor pass uses a Perlin
+texture and two LIC versions, aligned with `dir1` and `dir2`, from the same source.
+All three views use the same measured pigment; LIC changes the pigment distribution.
+Meshes without complete UVs use six signed-axis projections; their Perlin
 and LIC samples are blended according to the surface normal, so the cow can use
 LIC without an authored UV atlas. UVs extending beyond one tile use this
 triplanar mapping too, avoiding compression of the noise over oversized UV ranges.
@@ -117,17 +179,40 @@ The LIC output applies post-LIC bias and gain (starting defaults: `0.55` and
 for a neutral curve; change `mesh->material.licBias` and `licGain` to tune it.
 These controls do not affect the Perlin-only view.
 
-When LIC is active, the viewer also draws a cream-colored paper texture over the
+When LIC is active in watercolor mode, the viewer also draws a cream-colored paper texture over the
 rendered window. The grain is generated by
 [src/renderer/TextureGenerator.cpp](src/renderer/TextureGenerator.cpp) and blended
 at 20% strength in front of the scene. Press **L** to hide the overlay along with
 LIC by switching back to the unfiltered Perlin texture.
 
-For colors, edit `mesh->material` in `src/main.cpp`: `color_diffuse` is the main
+### Material and lighting settings
+
+For Phong colors, edit `mesh->material` in `src/main.cpp`: `color_diffuse` is the main
 surface color, `color_ambient` affects the ambient contribution, `color_specular`
 controls highlights, and `specular_power` controls their sharpness. RGB components
 use values from 0 to 1. Edit `world.lights` and `world.ambient_intensity` to change
 illumination.
+
+For watercolor colors, edit the `pigment` and `pigmentPaperColor` setup in
+`src/main.cpp` (default: measured Ultramarine Blue over warm paper). A fixed mix
+can use `measuredLayerFromMix({{blue, 0.7f}, {yellow, 0.3f}}).pigment` instead of a
+single pigment. The C++ spectral module generates 1,024 samples, including bare
+paper at thickness zero and paint at `pigmentLookupMaxThickness` (default 3).
+`Texture` uploads the result as `GL_RGB32F`, with no 8-bit quantization or gamma
+encoding. The shader interpolates between texel centers and applies display gamma
+only after looking up the linear RGB result.
+
+`watercolorThickness` controls overall paint amount; `watercolorNoiseStrength`
+controls how strongly Perlin/LIC redistributes it. Less illuminated regions get
+more pigment. These material settings are independent of the Phong RGB colors.
+The lookup assumes one fixed pigment mixture, paper color, and illuminant.
+Changing mixture, paper, or its thickness range requires regenerating the table;
+arbitrary per-fragment mixtures and full spectral lighting are not implemented.
+Colored lights currently affect paint amount through luminance. The paper overlay
+is an additional display effect, not a per-fragment change to the baked paper.
+
+The Phong baseline uses a copper material with a low ambient contribution, a white
+specular highlight, and a neutral white key light.
 
 Rebuild after C++ changes. Shader edits take effect when you restart the viewer.
 
@@ -181,11 +266,12 @@ For MSVC, use Developer PowerShell and add `toolchain=msvc` to the build command
 | C | Toggle curvature direction visualization |
 | 1 / 2 | Select principal direction `dir1` / `dir2` for LIC |
 | S | Save `output.ppm` in the working directory |
-| Space | Switch between shaders |
+| Space | Cycle Phong → Curvature → Watercolor |
 | L | Toggle between Perlin and LIC textures in the watercolor shader |
 | Esc | Exit |
 
-Other commands: `scons check` checks camera math, PPM output, and LIC filtering,
+Other commands: `scons check` checks camera math, PPM output, LIC filtering, and
+spectral pigment lookup endpoints/interpolation for both a pigment and a fixed mix;
 `scons mode=release -j4` builds an optimized executable, and `scons -c` cleans
 the default build. Append `--smoke-test` to a viewer command for a short hidden-window
 graphics check; `--help` lists the command-line options.
@@ -213,5 +299,6 @@ graphics check; `--help` lists the command-line options.
 by Andrew Wang, Evan Lohn, and Johnathan Zhou (UC Berkeley CS184, Spring 2020).
 [Source code](https://github.com/andrewdotwang/WatercolorRendering).
 Their project builds on ray tracing and mesh-based water/pigment transport.
-Our proposed approach uses a shared rasterization renderer to compare stylistic
-watercolor with image-space physical simulation.
+Our viewer uses rasterization for the stylistic views; the physical simulation
+currently runs separately on a 2D grid. Connecting it to a rendered scene remains
+future work.

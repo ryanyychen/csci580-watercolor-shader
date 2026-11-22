@@ -1,8 +1,10 @@
-#version 150
+#version 330 core
 
 in vec2 noiseUV;
 in vec3 vObjectPosition;
 in vec3 vObjectNormal;
+in vec3 vWorldPosition;
+in vec3 vWorldNormal;
 uniform sampler2D noiseTexture;
 uniform sampler2D licTexture;
 uniform sampler2D licTextureXPositive;
@@ -17,6 +19,16 @@ uniform float uLICGain;
 uniform int uUseMeshTextureCoordinates;
 uniform int uUseTriplanarNoise;
 uniform int uUseLIC;
+uniform sampler2D pigmentLookup;
+uniform int uUsePigmentLookup;
+uniform float uPigmentMaxThickness;
+uniform float uPaintThickness;
+uniform float uPigmentNoiseStrength;
+uniform int uLightCount;
+uniform vec3 uLightPosition[8];
+uniform vec3 uLightColor[8];
+uniform float uAmbientIntensity;
+uniform vec3 uAmbientColor;
 
 out vec4 c;
 
@@ -80,12 +92,37 @@ void main()
   float contrastedNoise = clamp(0.5 + 2.5 * (noise - 0.5), 0.0, 1.0);
   if (licEnabled)
     contrastedNoise = gainValue(biasValue(contrastedNoise, uLICBias), uLICGain);
-  vec3 color = licEnabled
-      ? vec3(0.45 + 0.4 * contrastedNoise,
-             0.62 + 0.3 * contrastedNoise,
-             0.82 + 0.18 * contrastedNoise)
-      : vec3(noise);
-  c = vec4(color, 1.0);
+  // Preserve a noise diagnostic for custom scenes that have not supplied a table.
+  if (uUsePigmentLookup == 0)
+  {
+    c = vec4(vec3(contrastedNoise), 1.0);
+    return;
+  }
+
+  // Lighting drives pigment amount, not a hardcoded blue RGB tint. More paint
+  // goes into shaded regions. The fixed lookup assumes its baked illuminant;
+  // colored lights affect density through luminance, not spectral illumination.
+  const vec3 luminanceWeights = vec3(0.2126, 0.7152, 0.0722);
+  vec3 N = normalize(vWorldNormal);
+  float illumination = uAmbientIntensity * dot(uAmbientColor, luminanceWeights);
+  for (int i = 0; i < uLightCount; ++i)
+  {
+    vec3 L = normalize(uLightPosition[i] - vWorldPosition);
+    illumination += max(dot(N, L), 0.0) * dot(uLightColor[i], luminanceWeights);
+  }
+  float shade = 1.0 - clamp(illumination, 0.0, 1.0);
+  float variation = 1.0 + clamp(uPigmentNoiseStrength, 0.0, 1.0) *
+                          (1.0 - 2.0 * contrastedNoise);
+  float thickness = clamp(max(uPaintThickness, 0.0) * (0.2 + 1.4 * shade) * variation,
+                          0.0, uPigmentMaxThickness);
+
+  // Samples include both endpoints. Map them to texel centers so zero thickness
+  // returns paper and the maximum returns the last baked color exactly.
+  float width = float(textureSize(pigmentLookup, 0).x);
+  float fraction = thickness / max(uPigmentMaxThickness, 1e-6);
+  float lookupU = (0.5 + fraction * (width - 1.0)) / width;
+  vec3 linearColor = texture(pigmentLookup, vec2(lookupU, 0.5)).rgb;
+  c = vec4(pow(clamp(linearColor, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
 }
   
 

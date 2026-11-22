@@ -40,6 +40,10 @@ void Render_World::Render(int width, int height)
         shader.set("uNoiseScale", object->material.noise_scale);
         shader.set("uLICBias", object->material.licBias);
         shader.set("uLICGain", object->material.licGain);
+        shader.set("uUsePigmentLookup", object->material.pigmentLookup ? 1 : 0);
+        shader.set("uPigmentMaxThickness", object->material.pigmentLookupMaxThickness);
+        shader.set("uPaintThickness", object->material.watercolorThickness);
+        shader.set("uPigmentNoiseStrength", object->material.watercolorNoiseStrength);
         shader.set("uUseMeshTextureCoordinates",
                    object->material.useMeshTextureCoordinates ? 1 : 0);
         shader.set("uUseTriplanarNoise",
@@ -81,6 +85,15 @@ void Render_World::Render(int width, int height)
             const int textureUnit = 2 + i;
             texture->Bind(GL_TEXTURE0 + textureUnit);
             shader.set(triplanarLICUniforms[i], textureUnit);
+        }
+
+        // Units 0-7 are reserved for Perlin/LIC. A 1024x1 RGB texture works on
+        // the existing desktop GL 3.3 path without a separate 1D-texture API.
+        if (object->material.pigmentLookup)
+        {
+            constexpr int pigmentTextureUnit = 8;
+            object->material.pigmentLookup->Bind(GL_TEXTURE0 + pigmentTextureUnit);
+            shader.set("pigmentLookup", pigmentTextureUnit);
         }
 
         for (size_t i = 0; i < lights.size(); ++i)

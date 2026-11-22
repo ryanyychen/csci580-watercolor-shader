@@ -167,6 +167,8 @@ check_sources = [
     "src/renderer/Camera.cpp",
     "src/renderer/Image_Output.cpp",
     "src/renderer/TextureGenerator.cpp",
+    "src/renderer/PigmentLookup.cpp",
+    "src/renderer/KubelkaMunkMeasured.cpp",
 ]
 checks = env.Program(str(build / "renderer_checks"), objects(check_sources, "checks") + support)
 
@@ -175,6 +177,6 @@ def run_checks(target, source, env):
     subprocess.run([str(Path(str(checks[0])).resolve())], cwd=build, check=True)
 
 
-check = Alias("check", checks, Action(run_checks, "Checking renderer and LIC helpers"))
+check = Alias("check", checks, Action(run_checks, "Checking renderer, LIC, and pigment lookup helpers"))
 # Rerun assertions even if the test executable itself did not need recompiling.
 AlwaysBuild(check)

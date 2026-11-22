@@ -51,13 +51,29 @@ Texture::Texture(int width, int height, const float * const * values)
   free(pixels);
 }
 
+Texture::Texture(int width, int height, const std::vector<glm::vec3> &colors)
+  : width(width), height(height), textureId(0)
+{
+  if (width <= 0 || height <= 0 ||
+      colors.size() != static_cast<size_t>(width) * static_cast<size_t>(height))
+    throw std::invalid_argument("RGB texture dimensions do not match its colors.");
+
+  // Pack explicitly so GLM alignment settings cannot insert padding between texels.
+  std::vector<float> pixels;
+  pixels.reserve(colors.size() * 3);
+  for (const glm::vec3 &color : colors)
+    for (int channel = 0; channel < 3; ++channel)
+      pixels.push_back(color[channel]);
+  Initialize(pixels.data(), GL_RGB32F, GL_RGB, GL_FLOAT);
+}
+
 Texture::~Texture()
 {
   if (textureId != 0)
 	glDeleteTextures(1, &textureId);
 }
 
-void Texture::Initialize(const void * pixels)
+void Texture::Initialize(const void * pixels, GLint internalFormat, GLenum format, GLenum type)
 {
   if (width <= 0 || height <= 0)
 	throw std::invalid_argument("Texture dimensions must be positive.");
@@ -68,8 +84,12 @@ void Texture::Initialize(const void * pixels)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0,
-			   GL_RED, GL_UNSIGNED_BYTE, pixels);
+  // A single-channel noise row need not be a multiple of the default four bytes.
+  GLint previousAlignment = 0;
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousAlignment);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, pixels);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, previousAlignment);
 }
 
 void Texture::Bind(GLenum textureUnit) const
