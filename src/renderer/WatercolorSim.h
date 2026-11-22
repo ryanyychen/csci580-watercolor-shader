@@ -11,8 +11,16 @@ class WatercolorSim
 
     void makePaper();
     void paintCircle(float centerX, float centerY, float radius, float water, float pigment);
-    void saveImage(const std::string &filename); // preview until Kubelka-Munk
+    void saveImage(const std::string &filename);
+    void saveDebugImages(const std::string &folder);
     float totalPigment();
+
+    // one time step of the main loop: move the water, then the pigment
+    void step();
+    void updateVelocities();
+    void relaxDivergence();
+    void flowOutward();
+    void movePigment();
 
     int width;
     int height;
@@ -27,6 +35,14 @@ class WatercolorSim
     // u is (width + 1) x height, v is width x (height + 1)
     std::vector<float> u;
     std::vector<float> v;
+
+  private:
+    // u at the left edge and v at the bottom edge of cell (i, j), 0 outside the paper
+    float uAt(int i, int j);
+    float vAt(int i, int j);
+    float maxSpeed();
+    void enforceBoundaries();
+    std::vector<float> blurWetMask();
 };
 
 // called by --sim

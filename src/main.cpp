@@ -381,7 +381,7 @@ int main(int argc, char **argv)
                     << "Usage: watercolor [part.obj ...] [--resources directory] [--output image.ppm] [--smoke-test] [--sim]\n"
                        "Left drag: orbit | Wheel: zoom | R: reset | N: normals | S: save output.ppm | Esc: quit\n"
                        "--output renders one frame to P3 PPM and exits; combined with --smoke-test renders three frames.\n"
-                       "--sim runs the watercolor simulation and saves screenshots/sim/step000.ppm.\n";
+                       "--sim runs the watercolor simulation and saves images to screenshots/sim/.\n";
                 return 0;
             }
             if (arg == "--resources" && i + 1 < argc)

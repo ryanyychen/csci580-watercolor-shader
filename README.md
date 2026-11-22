@@ -36,14 +36,23 @@ Running `./watercolor --sim` runs the physical simulation instead of the viewer:
 
 ```text
 main.cpp: see --sim and skip the window (the simulation runs on the CPU)
-  -> WatercolorSim.cpp: make the paper height field from Perlin noise + random grain
+  -> WatercolorSim.cpp: copy the paper height field from createPaperTexture (TextureGenerator.cpp)
   -> WatercolorSim.cpp: paint one wet circle of water and pigment
-  -> Image_Output.cpp: save screenshots/sim/step000.ppm
+  -> WatercolorSim.cpp: run 100 time steps of the main loop (Curtis section 4.2):
+       updateVelocities: shallow-water equations, water also runs downhill on the paper
+       relaxDivergence: even out cells where more water flows in than out
+       flowOutward: lower the pressure near the wet edge so water flows outward
+       movePigment: move the floating pigment along with the water
+  -> KubelkaMunk.cpp: color each cell as one layer of French Ultramarine over the paper
+  -> Image_Output.cpp: save paper.ppm, wet.ppm, and step000.ppm to step100.ppm in screenshots/sim/
 ```
 
-The simulation follows Curtis et al. (1997) on a 2D grid of paper cells. So far it
-only sets up the paper and the brush stroke; water flow, pigment movement, and drying
-are next, and its colors will then come from the Kubelka-Munk module.
+The simulation follows Curtis et al. (1997) on a 2D grid of paper cells, with water
+velocities stored on the cell edges (a staggered grid). It uses the same paper texture
+as the stylistic overlay, and its colors come from the Kubelka-Munk module. Water now
+flows and carries pigment to the edge of the stroke (edge darkening). Pigment settling
+onto the paper (granulation) and drying are next; until then, later frames keep moving
+pigment to the edge.
 
 Both watercolor methods can turn pigment amounts into colors with
 [src/renderer/KubelkaMunk.h](src/renderer/KubelkaMunk.h), which follows the
@@ -70,7 +79,7 @@ glm::vec3 color = colorFromMeasuredLayers({{blue, 0.5f}}, paperColor);
 The measured data comes from the
 [painting_tools](https://github.com/rubenwiersma/painting_tools) repository and is shared
 under CC BY-NC-SA 4.0. 
-Neither the simulation nor the watercolor shader uses these modules yet.
+The simulation uses the RGB version; the watercolor shader does not use either module yet.
 
 | File | What it controls |
 | --- | --- |
@@ -153,7 +162,7 @@ scons -j4
 # Render one image and exit
 ./watercolor "path/to/model.obj" --output screenshots/render.ppm
 
-# Run the physical simulation and save screenshots/sim/step000.ppm (no window)
+# Run the physical simulation and save images to screenshots/sim/ (no window)
 ./watercolor --sim
 ```
 
