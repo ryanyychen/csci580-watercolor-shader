@@ -6,9 +6,16 @@
 #include "renderer/Shader.h"
 #include "renderer/TextureGenerator.h"
 #include "renderer/WatercolorSim.h"
+#include "renderer/UI.h"
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,12 +30,23 @@ struct Input
     Render_World *world = nullptr;
     bool dragging = false;
     bool save_screenshot = false;
+    bool show_ui = false;
     double lastX = 0, lastY = 0;
 };
 
 Input &input(GLFWwindow *window)
 {
     return *static_cast<Input *>(glfwGetWindowUserPointer(window));
+}
+
+bool uiCapturesMouse()
+{
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+}
+
+bool uiCapturesKeyboard()
+{
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
 }
 
 void freeTexturePixels(float **pixels, int size)
@@ -121,7 +139,7 @@ void switchShaders(GLFWwindow * window) {
 void key(GLFWwindow *window, int k, int, int action, int)
 {
     // Handle toggles once per press, instead of repeating while a key is held.
-    if (action != GLFW_PRESS)
+    if (action != GLFW_PRESS || uiCapturesKeyboard())
         return;
     if (k == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -131,6 +149,8 @@ void key(GLFWwindow *window, int k, int, int action, int)
         input(window).world->show_normals = !input(window).world->show_normals;
     if (k == GLFW_KEY_S)
         input(window).save_screenshot = true;
+    if (k == GLFW_KEY_I)
+        input(window).show_ui = !input(window).show_ui;
     if (k == GLFW_KEY_1 || k == GLFW_KEY_2)
     {
         const PrincipalDirection direction =
@@ -175,15 +195,27 @@ void mouseButton(GLFWwindow *window, int button, int action, int)
 {
     if (button != GLFW_MOUSE_BUTTON_LEFT)
         return;
-    input(window).dragging = action == GLFW_PRESS;
+    auto &state = input(window);
+    if (action == GLFW_RELEASE)
+    {
+        state.dragging = false;
+        return;
+    }
+    if (action != GLFW_PRESS)
+        return;
+
+    state.dragging = false;
+    if (uiCapturesMouse())
+        return;
+    state.dragging = true;
     // Start each drag at the current cursor position to avoid a camera jump.
-    glfwGetCursorPos(window, &input(window).lastX, &input(window).lastY);
+    glfwGetCursorPos(window, &state.lastX, &state.lastY);
 }
 
 void cursor(GLFWwindow *window, double x, double y)
 {
     auto &state = input(window);
-    if (state.dragging)
+    if (state.dragging && !uiCapturesMouse())
         state.world->camera.Orbit(static_cast<float>(x - state.lastX),
                                   static_cast<float>(y - state.lastY));
     state.lastX = x;
@@ -192,6 +224,8 @@ void cursor(GLFWwindow *window, double x, double y)
 
 void scroll(GLFWwindow *window, double, double y)
 {
+    if (uiCapturesMouse())
+        return;
     input(window).world->camera.Zoom(static_cast<float>(y));
 }
 
@@ -230,6 +264,94 @@ void drawPaperOverlay(
     glEnable(GL_DEPTH_TEST);
 }
 
+void updateNoiseTexture(
+    Mesh &mesh, int minimumGridSize, int textureSize,
+    int octaveCount, float persistence, float lacunarity)
+{
+    if (textureSize <= 0)
+        throw std::invalid_argument("Perlin texture size must be positive");
+    if (octaveCount <= 0)
+        throw std::invalid_argument("Perlin octave count must be positive");
+    if (!std::isfinite(persistence) || persistence < 0.0f || persistence > 1.0f)
+        throw std::invalid_argument("Perlin persistence must be between zero and one");
+    if (!std::isfinite(lacunarity) || lacunarity <= 0.0f)
+        throw std::invalid_argument("Perlin lacunarity must be positive and finite");
+
+    const double largestScale = std::max(
+        1.0, std::pow(static_cast<double>(lacunarity), octaveCount - 1));
+    const double requiredGridSize = std::ceil(6.0 * largestScale) + 1.0;
+    if (!std::isfinite(requiredGridSize) ||
+        requiredGridSize > std::numeric_limits<int>::max())
+        throw std::invalid_argument("Perlin settings require an excessively large gradient grid");
+    resizeGradientGrid(std::max(minimumGridSize, static_cast<int>(requiredGridSize)));
+
+    FloatTextureData noiseValues{
+        createPerlinTexture(textureSize, octaveCount, persistence, lacunarity),
+        textureSize};
+    if (noiseValues.rows == nullptr)
+        throw std::runtime_error("Failed to allocate Perlin noise texture");
+    auto noiseTexture = std::make_unique<Texture>(textureSize, textureSize, noiseValues.rows);
+    std::array<std::unique_ptr<Texture>, 2> licTextures;
+    std::array<std::array<std::unique_ptr<Texture>, 6>, 2> triplanarLICTextures;
+
+    const PrincipalDirection directions[2] = {
+        PrincipalDirection::Dir1, PrincipalDirection::Dir2};
+    if (mesh.usesUVNoiseMapping())
+    {
+        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+        {
+            const auto directionField = mesh.createPrincipalDirectionField(
+                textureSize, directions[directionIndex]);
+            FloatTextureData licValues{
+                createLineIntegralConvolutionTexture(
+                    textureSize, noiseValues.rows, directionField),
+                textureSize};
+            if (licValues.rows == nullptr)
+                throw std::runtime_error("Failed to allocate LIC texture");
+            licTextures[directionIndex] =
+                std::make_unique<Texture>(textureSize, textureSize, licValues.rows);
+        }
+    }
+    else
+    {
+        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+        {
+            const auto directionFields = mesh.createTriplanarPrincipalDirectionFields(
+                textureSize, directions[directionIndex]);
+            for (size_t projectionIndex = 0; projectionIndex < directionFields.size();
+                 ++projectionIndex)
+            {
+                FloatTextureData licValues{
+                    createLineIntegralConvolutionTexture(
+                        textureSize, noiseValues.rows,
+                        directionFields[projectionIndex]),
+                    textureSize};
+                if (licValues.rows == nullptr)
+                    throw std::runtime_error("Failed to allocate triplanar LIC texture");
+                triplanarLICTextures[directionIndex][projectionIndex] =
+                    std::make_unique<Texture>(textureSize, textureSize, licValues.rows);
+            }
+        }
+    }
+
+    Material &material = mesh.material;
+    delete material.texture;
+    material.texture = noiseTexture.release();
+    for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+    {
+        delete material.licTextures[directionIndex];
+        material.licTextures[directionIndex] = licTextures[directionIndex].release();
+        for (size_t projectionIndex = 0; projectionIndex < 6; ++projectionIndex)
+        {
+            delete material.triplanarLICTextures[directionIndex][projectionIndex];
+            material.triplanarLICTextures[directionIndex][projectionIndex] =
+                triplanarLICTextures[directionIndex][projectionIndex].release();
+        }
+    }
+    material.useMeshTextureCoordinates = mesh.usesUVNoiseMapping();
+    material.useTriplanarNoise = !mesh.usesUVNoiseMapping();
+}
+
 void run(GLFWwindow *window, const std::filesystem::path &resources,
          const std::vector<std::filesystem::path> &meshPaths, bool smokeTest,
          const std::filesystem::path &outputPath)
@@ -237,6 +359,7 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     // All GPU resources are created after main() has made an OpenGL context current.
     // Declare the shader before the world so objects are destroyed before their shader.
     createShaders(resources);
+    UI noiseUI;
     Render_World world;
     auto mesh = std::make_unique<Mesh>(meshPaths);
     mesh->material_shader = phongShader;
@@ -260,56 +383,17 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     mesh->material.pigmentLookup =
         new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
     
-    // generate noise textures for watercolor shading
-    generateGradientGrid();
+    // Generate noise textures for watercolor shading.
+    WatercolorSettings noiseSettings;
+    noiseSettings.licBias = mesh->material.licBias;
+    noiseSettings.licGain = mesh->material.licGain;
+    constexpr int noiseGridSize = 256;
     const int noiseTextureSize = 256;
-    FloatTextureData noiseValues{createPerlinTexture(noiseTextureSize), noiseTextureSize};
-    if (noiseValues.rows == nullptr)
-        throw std::runtime_error("Failed to allocate Perlin noise texture");
-    mesh->material.texture = new Texture(noiseTextureSize, noiseTextureSize, noiseValues.rows);
+    updateNoiseTexture(
+        *mesh, noiseGridSize, noiseTextureSize,
+        noiseSettings.octaveCount, noiseSettings.persistence, noiseSettings.lacunarity);
 
-    const PrincipalDirection directions[2] = {
-        PrincipalDirection::Dir1, PrincipalDirection::Dir2};
-    if (mesh->usesUVNoiseMapping())
-    {
-        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
-        {
-            const auto directionField = mesh->createPrincipalDirectionField(
-                noiseTextureSize, directions[directionIndex]);
-            FloatTextureData licValues{
-                createLineIntegralConvolutionTexture(
-                    noiseTextureSize, noiseValues.rows, directionField),
-                noiseTextureSize};
-            if (licValues.rows == nullptr)
-                throw std::runtime_error("Failed to allocate LIC texture");
-            mesh->material.licTextures[directionIndex] =
-                new Texture(noiseTextureSize, noiseTextureSize, licValues.rows);
-        }
-        mesh->material.useMeshTextureCoordinates = true;
-    }
-    else
-    {
-        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
-        {
-            const auto directionFields = mesh->createTriplanarPrincipalDirectionFields(
-                noiseTextureSize, directions[directionIndex]);
-            for (size_t projectionIndex = 0; projectionIndex < directionFields.size();
-                 ++projectionIndex)
-            {
-                FloatTextureData licValues{
-                    createLineIntegralConvolutionTexture(
-                        noiseTextureSize, noiseValues.rows,
-                        directionFields[projectionIndex]),
-                    noiseTextureSize};
-                if (licValues.rows == nullptr)
-                    throw std::runtime_error("Failed to allocate triplanar LIC texture");
-                mesh->material.triplanarLICTextures[directionIndex][projectionIndex] =
-                    new Texture(noiseTextureSize, noiseTextureSize, licValues.rows);
-            }
-        }
-        mesh->material.useTriplanarNoise = true;
-    }
-
+    Mesh *meshForNoiseUpdates = mesh.get();
     world.objects.push_back(std::move(mesh));
     // An off-axis white key light gives a clear lit-to-shadow transition.
     // Keep its strength below one so the highlight retains headroom.
@@ -346,6 +430,8 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     glfwSetMouseButtonCallback(window, mouseButton);
     glfwSetCursorPosCallback(window, cursor);
     glfwSetScrollCallback(window, scroll);
+    if (!noiseUI.initializeUI(window))
+        throw std::runtime_error("ImGui initialization failed");
 
     // Keep the nearest fragment at each pixel, regardless of triangle draw order.
     glEnable(GL_DEPTH_TEST);
@@ -380,6 +466,31 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         const float pixelScale =
             windowWidth > 0 ? static_cast<float>(width) / windowWidth : 1.0f;
         modeLabel.Draw(*directionShader, label, width, height, pixelScale);
+
+        if (state.show_ui && currentShader == ShaderType::Watercolor)
+        {
+            const UIChanges changes =
+                noiseUI.drawUI(noiseSettings, meshForNoiseUpdates->material.useLIC);
+            if (changes.perlinSettingsChanged)
+            {
+                try
+                {
+                    updateNoiseTexture(
+                        *meshForNoiseUpdates, noiseGridSize, noiseTextureSize,
+                        noiseSettings.octaveCount, noiseSettings.persistence,
+                        noiseSettings.lacunarity);
+                }
+                catch (const std::exception &error)
+                {
+                    std::cerr << "Noise texture update failed: " << error.what() << '\n';
+                }
+            }
+            if (changes.licSettingsChanged)
+            {
+                meshForNoiseUpdates->material.licBias = noiseSettings.licBias;
+                meshForNoiseUpdates->material.licGain = noiseSettings.licGain;
+            }
+        }
 
         if (!outputPath.empty() && frames == 0)
             saveScreenshot(world.camera, outputPath);

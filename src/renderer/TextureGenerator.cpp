@@ -10,9 +10,11 @@
 
 namespace
 {
-  const int gradientGridSize = 256; //expanded grid size to account for fractal noise layers
+  constexpr int minimumGradientGridSize = 49;
+  int gradientGridSize = 256; // expanded grid size to account for fractal noise layers
   //this is a 2D array of unit vectors that will be used to generate the noise texture.
-  glm::vec2 gradientGrid[gradientGridSize][gradientGridSize];
+  std::vector<std::vector<glm::vec2>> gradientGrid(
+      gradientGridSize, std::vector<glm::vec2>(gradientGridSize));
 
   float perlinNoise(float x, float y)
   {
@@ -140,25 +142,50 @@ namespace
   }
 }
 
-void generateGradientGrid()
+void resizeGradientGrid(int newSize)
 {
+  if (newSize < minimumGradientGridSize)
+    throw std::invalid_argument("Gradient grid is too small for the Perlin noise octaves");
+
+  std::vector<std::vector<glm::vec2>> newGradientGrid(
+      newSize, std::vector<glm::vec2>(newSize));
   std::default_random_engine perlin_generator;
   std::uniform_real_distribution<float> distribution(0, 2.0f * std::acos(-1.0f));
-  for (int i = 0; i < gradientGridSize; i++) {
-    for (int j = 0; j < gradientGridSize; j++) {
+  for (int i = 0; i < newSize; i++) {
+    for (int j = 0; j < newSize; j++) {
       float angle = distribution(perlin_generator);
       float y = std::sin(angle);
       float x = std::cos(angle);
       glm::vec2 v(x, y);
-      gradientGrid[i][j] = v;
+      newGradientGrid[i][j] = v;
     }
   }
+  gradientGrid.swap(newGradientGrid);
+  gradientGridSize = newSize;
 }
 
-float ** createPerlinTexture(int size)
+void generateGradientGrid()
+{
+  resizeGradientGrid(256);
+}
+
+float ** createPerlinTexture(
+    int size, int octaveCount, float persistence, float lacunarity)
 {
   if (size <= 0)
     return nullptr;
+  if (octaveCount <= 0)
+    throw std::invalid_argument("Perlin octave count must be positive");
+  if (!std::isfinite(persistence) || persistence < 0.0f || persistence > 1.0f)
+    throw std::invalid_argument("Perlin persistence must be between zero and one");
+  if (!std::isfinite(lacunarity) || lacunarity <= 0.0f)
+    throw std::invalid_argument("Perlin lacunarity must be positive and finite");
+
+  const double largestScale = std::max(
+      1.0, std::pow(static_cast<double>(lacunarity), octaveCount - 1));
+  const double requiredGridSize = std::ceil(6.0 * largestScale) + 1.0;
+  if (!std::isfinite(requiredGridSize) || requiredGridSize > gradientGridSize)
+    throw std::invalid_argument("Gradient grid is too small for the requested Perlin octaves");
 
   float ** pixels = static_cast<float **>(malloc(static_cast<size_t>(size) * sizeof(float *)));
   if (pixels == nullptr)
@@ -176,8 +203,6 @@ float ** createPerlinTexture(int size)
     }
   }
 
-  float persistence = 0.5; // amplitude multiplier per layer
-  float lacunarity = 2.0; // noise_size multiplier per layer
   float amp = 1.0;
   float size_scale = 1;
   float total_amp = 0;
@@ -186,7 +211,7 @@ float ** createPerlinTexture(int size)
     for (int x = 0; x < size; ++x)
       pixels[y][x] = 0.0f;
   }
-  for (int i = 0; i < 4; i++) { // iterate multiple times for fractal noise
+  for (int i = 0; i < octaveCount; i++) {
     for (int y = 0; y < size; ++y)
     {
       for (int x = 0; x < size; ++x)

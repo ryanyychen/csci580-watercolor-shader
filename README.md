@@ -6,6 +6,10 @@ A Computer Graphics final project exploring stylistic watercolor rendering and
 physical water/pigment simulation. The C++/OpenGL OBJ viewer supports Phong lighting,
 curvature visualization, and three watercolor views using measured pigment colors.
 It includes camera controls, an on-screen mode label, and PPM image output.
+In watercolor mode, press **I** to open controls for adjusting Perlin octaves,
+persistence, and lacunarity; the noise and its LIC variants regenerate when you
+release a changed slider. LIC bias and gain sliders appear only when LIC is
+enabled, and apply when released.
 
 The physical simulation currently runs separately on a flat 2D paper grid. It is
 not yet connected to the 3D model or the viewer's watercolor shader.
@@ -174,9 +178,10 @@ Meshes without complete UVs use six signed-axis projections; their Perlin
 and LIC samples are blended according to the surface normal, so the cow can use
 LIC without an authored UV atlas. UVs extending beyond one tile use this
 triplanar mapping too, avoiding compression of the noise over oversized UV ranges.
-The LIC output applies post-LIC bias and gain (starting defaults: `0.55` and
-`0.70`) for stronger, brush-like streak contrast. Set either value to `0.5`
-for a neutral curve; change `mesh->material.licBias` and `licGain` to tune it.
+The LIC output applies post-LIC bias and gain (starting defaults: `0.5` and
+`0.75`) for stronger, brush-like streak contrast. Set either value to `0.5`
+for a neutral curve. In the viewer, adjust them from the watercolor controls
+when LIC is enabled.
 These controls do not affect the Perlin-only view.
 
 When LIC is active in watercolor mode, the viewer also draws a cream-colored paper texture over the
@@ -268,6 +273,7 @@ For MSVC, use Developer PowerShell and add `toolchain=msvc` to the build command
 | S | Save `output.ppm` in the working directory |
 | Space | Cycle Phong → Curvature → Watercolor |
 | L | Toggle between Perlin and LIC textures in the watercolor shader |
+| I | Show or hide the watercolor noise controls |
 | Esc | Exit |
 
 Other commands: `scons check` checks camera math, PPM output, LIC filtering, and

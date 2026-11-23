@@ -70,6 +70,58 @@ int main()
         require(!(file >> extra), "Unexpected PPM pixels");
         file.close();
         std::filesystem::remove(filename);
+        resizeGradientGrid(64);
+        float **perlin = createPerlinTexture(8);
+        require(perlin != nullptr, "Perlin texture allocation failed after resizing gradient grid");
+        for (int y = 0; y < 8; ++y)
+        {
+            for (int x = 0; x < 8; ++x)
+            {
+                require(std::isfinite(perlin[y][x]) &&
+                            perlin[y][x] >= 0.0f && perlin[y][x] <= 1.0f,
+                        "Perlin texture is invalid after resizing gradient grid");
+            }
+        }
+        float **customPerlin = createPerlinTexture(8, 2, 0.25f, 1.5f);
+        require(customPerlin != nullptr, "Custom Perlin texture allocation failed");
+        bool customParametersChangedOutput = false;
+        for (int y = 0; y < 8; ++y)
+        {
+            for (int x = 0; x < 8; ++x)
+            {
+                customParametersChangedOutput =
+                    customParametersChangedOutput ||
+                    std::abs(customPerlin[y][x] - perlin[y][x]) > 1e-6f;
+            }
+            std::free(perlin[y]);
+            std::free(customPerlin[y]);
+        }
+        std::free(perlin);
+        std::free(customPerlin);
+        require(customParametersChangedOutput, "Custom Perlin parameters did not affect the output");
+
+        bool undersizedGridRejected = false;
+        try
+        {
+            resizeGradientGrid(48);
+        }
+        catch (const std::invalid_argument &)
+        {
+            undersizedGridRejected = true;
+        }
+        require(undersizedGridRejected, "Gradient grid accepted a size too small for Perlin noise");
+        bool insufficientOctaveGridRejected = false;
+        try
+        {
+            createPerlinTexture(8, 4, 0.5f, 3.0f);
+        }
+        catch (const std::invalid_argument &)
+        {
+            insufficientOctaveGridRejected = true;
+        }
+        require(insufficientOctaveGridRejected,
+                "Perlin texture accepted octave parameters that exceed the gradient grid");
+
         const int textureSize = 33;
         std::vector<float> stripeNoise(static_cast<size_t>(textureSize) * textureSize);
         std::vector<glm::vec2> horizontalField(stripeNoise.size(), glm::vec2(1.0f, 0.0f));

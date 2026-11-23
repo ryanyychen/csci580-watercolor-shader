@@ -39,7 +39,7 @@ build = Path("build-scons") / toolchain / mode
 deps = Path(ARGUMENTS.get("deps", ".deps")).resolve()
 # One signature database tracks the shared root executable across configurations.
 SConsignFile("build-scons/.sconsign.dblite")
-for name in ("glfw", "glm", "glad", "tinyobjloader", "eigen"):
+for name in ("glfw", "glm", "glad", "imgui", "tinyobjloader", "eigen"):
     if not (deps / (name + "-src")).is_dir():
         print("Missing dependencies. Run: python scripts/setup_dependencies.py")
         Exit(1)
@@ -65,6 +65,8 @@ env.Append(
         str(deps / "glm-src"),
         str(deps / "tinyobjloader-src"),
         str(deps / "glfw-src/include"),
+        str(deps / "imgui-src"),
+        str(deps / "imgui-src/backends"),
         str((build / "generated/include").resolve()),
     ],
 )
@@ -118,6 +120,19 @@ def objects(sources, folder, environment=env):
 
 support = objects([generated[0]], "glad")
 support += objects([deps / "tinyobjloader-src/tiny_obj_loader.cc"], "tinyobjloader")
+imgui_sources = [
+    deps / "imgui-src" / source
+    for source in (
+        "imgui.cpp",
+        "imgui_demo.cpp",
+        "imgui_draw.cpp",
+        "imgui_tables.cpp",
+        "imgui_widgets.cpp",
+        "backends/imgui_impl_glfw.cpp",
+        "backends/imgui_impl_opengl3.cpp",
+    )
+]
+imgui_objects = objects(imgui_sources, "imgui")
 if sys.platform == "win32":
     glfw = env.Clone()
     # GLFW's own sources reject application header-option macros like INCLUDE_NONE.
@@ -157,7 +172,7 @@ else:
         env.Append(LIBS=["dl", "pthread"])
 
 sources = [Path("src/main.cpp")] + sorted(Path("src/renderer").glob("*.cpp"))
-program = env.Program("watercolor", objects(sources, "renderer") + support)
+program = env.Program("watercolor", objects(sources, "renderer") + imgui_objects + support)
 # The root executable loads shaders/ and assets/ directly from the repository.
 Default(program)
 
