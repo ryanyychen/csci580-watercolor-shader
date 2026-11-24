@@ -1,6 +1,7 @@
 # Native SCons build, following the Environment/Program style of the course projects.
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -23,6 +24,7 @@ Clean: python -m SCons -c (use the same mode/toolchain/deps arguments as the bui
 Dependencies: python scripts/setup_dependencies.py; override with deps=directory
 Output: ./watercolor[.exe] (intermediate files stay under build-scons/)
 Linux/macOS: install GLFW and pkg-config; this build uses pkg-config glfw3.
+CMake is required to build the pinned Assimp dependency.
 """)
 if GetOption("help"):
     Exit(0)
@@ -39,10 +41,17 @@ build = Path("build-scons") / toolchain / mode
 deps = Path(ARGUMENTS.get("deps", ".deps")).resolve()
 # One signature database tracks the shared root executable across configurations.
 SConsignFile("build-scons/.sconsign.dblite")
-for name in ("glfw", "glm", "glad", "imgui", "tinyobjloader", "eigen"):
+for name in ("glfw", "glm", "glad", "imgui", "tinyobjloader", "eigen", "assimp"):
     if not (deps / (name + "-src")).is_dir():
         print("Missing dependencies. Run: python scripts/setup_dependencies.py")
         Exit(1)
+
+assimp_src = deps / "assimp-src"
+assimp_build = (build / "assimp").resolve()
+assimp_libdir = assimp_build / "lib"
+assimp_library = assimp_libdir / (
+    "assimp.lib" if sys.platform == "win32" and toolchain == "msvc" else "libassimp.a"
+)
 
 if env.get("CXX") == "cl":
     env.Append(
@@ -67,9 +76,89 @@ env.Append(
         str(deps / "glfw-src/include"),
         str(deps / "imgui-src"),
         str(deps / "imgui-src/backends"),
+        str(assimp_src / "include"),
+        str(assimp_build / "include"),
         str((build / "generated/include").resolve()),
     ],
 )
+
+
+def build_assimp(target, source, env):
+    cmake = env.WhereIs("cmake")
+    if not cmake:
+        raise RuntimeError("CMake is required to build Assimp")
+
+    configure = [
+        cmake,
+        "-S",
+        str(assimp_src),
+        "-B",
+        str(assimp_build),
+        "-DCMAKE_BUILD_TYPE=" + ("Debug" if mode == "debug" else "Release"),
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DASSIMP_BUILD_TESTS=OFF",
+        "-DASSIMP_BUILD_ASSIMP_TOOLS=OFF",
+        "-DASSIMP_BUILD_SAMPLES=OFF",
+        "-DASSIMP_BUILD_DOCS=OFF",
+        "-DASSIMP_BUILD_ZLIB=" + ("ON" if sys.platform == "win32" else "OFF"),
+        "-DASSIMP_INSTALL=OFF",
+        "-DASSIMP_WARNINGS_AS_ERRORS=OFF",
+        "-DASSIMP_INJECT_DEBUG_POSTFIX=OFF",
+        "-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=" + str(assimp_libdir),
+    ]
+    for config in ("DEBUG", "RELEASE", "RELWITHDEBINFO", "MINSIZEREL"):
+        configure.append(
+            "-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}".format(config, assimp_libdir)
+        )
+    if sys.platform == "win32" and toolchain == "mingw":
+        configure.extend(["-G", "MinGW Makefiles"])
+    subprocess.run(configure, check=True)
+    subprocess.run(
+        [
+            cmake,
+            "--build",
+            str(assimp_build),
+            "--config",
+            "Debug" if mode == "debug" else "Release",
+            "--target",
+            "assimp",
+            "--parallel",
+            str(GetOption("num_jobs") or 1),
+        ],
+        check=True,
+    )
+
+    library = Path(str(target[0]))
+    if not library.exists():
+        candidates = [
+            path
+            for path in assimp_libdir.rglob("*")
+            if path.is_file()
+            and path.suffix.lower() in (".a", ".lib")
+            and path.name.lower().startswith(("libassimp", "assimp"))
+        ]
+        if len(candidates) != 1:
+            raise RuntimeError(
+                f"Expected one Assimp static library in {assimp_libdir}, found {len(candidates)}"
+            )
+        library.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(candidates[0], library)
+
+
+assimp_library_node = env.Command(
+    str(assimp_library),
+    [str(assimp_src / "CMakeLists.txt")],
+    Action(build_assimp, "Building Assimp"),
+)
+assimp_libraries = [assimp_library_node[0]]
+if sys.platform == "win32":
+    zlib_library = "zlibstatic.lib" if toolchain == "msvc" else "libzlibstatic.a"
+    assimp_libraries.append(str(assimp_libdir / zlib_library))
+    if toolchain == "mingw":
+        assimp_libraries.append("winpthread")
+else:
+    assimp_libraries.append("z")
+env.Append(LIBPATH=[str(assimp_libdir)], LIBS=assimp_libraries)
 
 
 def generate_glad(target, source, env):
@@ -113,7 +202,7 @@ def objects(sources, folder, environment=env):
     for source in sources:
         target = build / "obj" / folder / Path(str(source)).stem
         nodes = environment.Object(target=str(target), source=str(source))
-        environment.Depends(nodes, generated)
+        environment.Depends(nodes, [generated, assimp_library_node])
         result.extend(nodes)
     return result
 
@@ -173,6 +262,7 @@ else:
 
 sources = [Path("src/main.cpp")] + sorted(Path("src/renderer").glob("*.cpp"))
 program = env.Program("watercolor", objects(sources, "renderer") + imgui_objects + support)
+env.Depends(program, assimp_library_node)
 # The root executable loads shaders/ and assets/ directly from the repository.
 Default(program)
 
@@ -184,9 +274,11 @@ check_sources = [
     "src/renderer/SceneImporter.cpp",
     "src/renderer/TextureGenerator.cpp",
     "src/renderer/PigmentLookup.cpp",
+    "src/renderer/KubelkaMunk.cpp",
     "src/renderer/KubelkaMunkMeasured.cpp",
 ]
 checks = env.Program(str(build / "renderer_checks"), objects(check_sources, "checks") + support)
+env.Depends(checks, assimp_library_node)
 
 
 def run_checks(target, source, env):

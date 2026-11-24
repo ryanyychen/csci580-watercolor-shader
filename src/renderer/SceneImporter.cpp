@@ -1,10 +1,20 @@
 #include "SceneImporter.h"
 #include <tiny_obj_loader.h>
+#include <glm/glm.hpp>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <string>
+#include <vector>
+#include <assimp/Importer.hpp>
+#include <assimp/material.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 namespace
 {
@@ -55,28 +65,23 @@ std::optional<ImportedMaterial> assignedMaterial(
         glm::vec3(source.diffuse[0], source.diffuse[1], source.diffuse[2]),
         glm::vec3(source.specular[0], source.specular[1], source.specular[2]),
         static_cast<float>(source.shininess)};
-    if (!std::isfinite(material.ambient.x) || !std::isfinite(material.ambient.y) ||
+    const bool hasInvalidMaterialValue =
+        !std::isfinite(material.ambient.x) || !std::isfinite(material.ambient.y) ||
         !std::isfinite(material.ambient.z) || !std::isfinite(material.diffuse.x) ||
         !std::isfinite(material.diffuse.y) || !std::isfinite(material.diffuse.z) ||
         !std::isfinite(material.specular.x) || !std::isfinite(material.specular.y) ||
         !std::isfinite(material.specular.z) || !std::isfinite(material.shininess) ||
-        material.shininess < 0.0f)
+        material.shininess < 0.0f;
+    if (hasInvalidMaterialValue)
+    {
         throw std::runtime_error("OBJ material contains invalid values: " + path.string());
+    }
 
     return material;
 }
 
-} // namespace
-
-ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths)
-{
-    if (paths.empty())
-        throw std::runtime_error("Expected at least one OBJ file");
-
-    ImportedSceneData imported;
-    for (const auto &path : paths)
-    {
-        const size_t firstTriangle = imported.triangles.size();
+void loadObjFile(ImportedSceneData& imported, const std::filesystem::path& path) {
+    const size_t firstTriangle = imported.triangles.size();
         tinyobj::ObjReader reader;
         tinyobj::ObjReaderConfig config;
 
@@ -181,6 +186,244 @@ ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths
             throw std::runtime_error("OBJ has no non-degenerate triangles: " + path.string());
         std::cout << "Loaded " << path << ": "
                   << imported.triangles.size() - firstTriangle << " triangles\n";
+}
+
+bool isFinite(const glm::vec3 &value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+std::optional<ImportedMaterial> ProcessMaterial(const aiScene &scene, const aiMesh &mesh)
+{
+    if (scene.mNumMaterials == 0)
+        return std::nullopt;
+    if (mesh.mMaterialIndex >= scene.mNumMaterials ||
+        !scene.mMaterials[mesh.mMaterialIndex])
+        throw std::runtime_error("FBX mesh has an invalid material index");
+
+    const aiMaterial &source = *scene.mMaterials[mesh.mMaterialIndex];
+    // Keep the renderer's defaults for material properties absent from the FBX.
+    ImportedMaterial material{
+        glm::vec3(0.45f, 0.16f, 0.06f),
+        glm::vec3(0.45f, 0.16f, 0.06f),
+        glm::vec3(0.60f),
+        48.0f};
+    bool hasMaterialProperties = false;
+
+    aiColor3D color;
+    if (source.Get(AI_MATKEY_COLOR_AMBIENT, color) == AI_SUCCESS)
+    {
+        material.ambient = glm::vec3(color.r, color.g, color.b);
+        hasMaterialProperties = true;
+    }
+    if (source.Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
+    {
+        material.diffuse = glm::vec3(color.r, color.g, color.b);
+        hasMaterialProperties = true;
+    }
+    if (source.Get(AI_MATKEY_COLOR_SPECULAR, color) == AI_SUCCESS)
+    {
+        material.specular = glm::vec3(color.r, color.g, color.b);
+        hasMaterialProperties = true;
+    }
+
+    ai_real shininess = 0.0f;
+    if (source.Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS)
+    {
+        material.shininess = static_cast<float>(shininess);
+        hasMaterialProperties = true;
+    }
+
+    if (!hasMaterialProperties)
+        return std::nullopt;
+
+    if (!isFinite(material.ambient) || !isFinite(material.diffuse) ||
+        !isFinite(material.specular) || !std::isfinite(material.shininess) ||
+        material.shininess < 0.0f)
+        throw std::runtime_error("FBX material contains invalid values");
+
+    return material;
+}
+
+ImportedSceneData ProcessMesh(const aiMesh &mesh, const aiScene &scene,
+                              const aiMatrix4x4 &transform)
+{
+    ImportedSceneData data;
+    data.hasTextureCoordinates = mesh.HasTextureCoords(0);
+    data.positions.reserve(mesh.mNumVertices);
+
+    aiMatrix3x3 normalTransform(transform);
+    if (mesh.HasNormals())
+        normalTransform.Inverse().Transpose();
+
+    data.material = ProcessMaterial(scene, mesh);
+
+    for (unsigned int i = 0; i < mesh.mNumVertices; ++i)
+    {
+        const aiVector3D transformed = transform * mesh.mVertices[i];
+        const glm::vec3 position(transformed.x, transformed.y, transformed.z);
+        if (!isFinite(position))
+            throw std::runtime_error("FBX contains a non-finite position");
+        data.positions.push_back(position);
+    }
+
+    for (unsigned int i = 0; i < mesh.mNumFaces; ++i)
+    {
+        const aiFace &face = mesh.mFaces[i];
+        if (face.mNumIndices != 3)
+            throw std::runtime_error("Assimp triangulation failed; expected triangles");
+
+        glm::vec3 facePositions[3];
+        for (unsigned int corner = 0; corner < 3; ++corner)
+        {
+            const unsigned int vertexIndex = face.mIndices[corner];
+            if (vertexIndex >= mesh.mNumVertices)
+                throw std::runtime_error("FBX has an invalid vertex index");
+            facePositions[corner] = data.positions[vertexIndex];
+        }
+
+        glm::vec3 faceNormal =
+            glm::cross(facePositions[1] - facePositions[0],
+                       facePositions[2] - facePositions[0]);
+        const float area = glm::length(faceNormal);
+        if (!std::isfinite(area) || area < 1e-12f)
+            continue;
+        faceNormal /= area;
+
+        ImportedSceneTriangle triangle{};
+        for (unsigned int corner = 0; corner < 3; ++corner)
+        {
+            const unsigned int vertexIndex = face.mIndices[corner];
+            triangle.vertexIndices[corner] = vertexIndex;
+
+            glm::vec3 normal = faceNormal;
+            if (mesh.HasNormals())
+            {
+                const aiVector3D transformed =
+                    normalTransform * mesh.mNormals[vertexIndex];
+                const glm::vec3 supplied(transformed.x, transformed.y, transformed.z);
+                const float length = glm::length(supplied);
+                if (isFinite(supplied) && std::isfinite(length) && length > 1e-12f)
+                    normal = supplied / length;
+            }
+            triangle.normals[corner] = normal;
+
+            if (data.hasTextureCoordinates)
+            {
+                const aiVector3D &uv = mesh.mTextureCoords[0][vertexIndex];
+                triangle.texcoords[corner] = glm::vec2(uv.x, uv.y);
+                if (!std::isfinite(uv.x) || !std::isfinite(uv.y))
+                {
+                    triangle.texcoords[corner] = glm::vec2(0.0f);
+                    data.hasTextureCoordinates = false;
+                }
+            }
+        }
+        data.triangles.push_back(triangle);
+    }
+
+    return data;
+}
+
+void ProcessNode(const aiNode &node, const aiScene &scene,
+                 const aiMatrix4x4 &parentTransform,
+                 std::vector<ImportedSceneData> &meshes)
+{
+    const aiMatrix4x4 transform = parentTransform * node.mTransformation;
+
+    for (unsigned int i = 0; i < node.mNumMeshes; ++i)
+    {
+        const unsigned int meshIndex = node.mMeshes[i];
+        if (meshIndex >= scene.mNumMeshes || !scene.mMeshes[meshIndex])
+            throw std::runtime_error("FBX node has an invalid mesh index");
+        meshes.push_back(ProcessMesh(*scene.mMeshes[meshIndex], scene, transform));
+    }
+
+    for (unsigned int i = 0; i < node.mNumChildren; ++i)
+    {
+        if (!node.mChildren[i])
+            throw std::runtime_error("FBX node has a null child");
+        ProcessNode(*node.mChildren[i], scene, transform, meshes);
+    }
+}
+
+void squashMeshes(ImportedSceneData &imported,
+                  const std::vector<ImportedSceneData> &meshes)
+{
+    const size_t maxIndex = std::numeric_limits<unsigned int>::max();
+    for (const ImportedSceneData &mesh : meshes)
+    {
+        const size_t baseVertex = imported.positions.size();
+        if (baseVertex > maxIndex || mesh.positions.size() > maxIndex - baseVertex)
+            throw std::overflow_error("Too many FBX vertices");
+
+        imported.positions.insert(imported.positions.end(),
+                                  mesh.positions.begin(), mesh.positions.end());
+        imported.hasTextureCoordinates =
+            imported.hasTextureCoordinates && mesh.hasTextureCoordinates;
+        if (!imported.material && mesh.material)
+            imported.material = mesh.material;
+
+        imported.triangles.reserve(imported.triangles.size() + mesh.triangles.size());
+        for (const ImportedSceneTriangle &source : mesh.triangles)
+        {
+            ImportedSceneTriangle triangle = source;
+            for (unsigned int &vertexIndex : triangle.vertexIndices)
+            {
+                if (vertexIndex >= mesh.positions.size())
+                    throw std::runtime_error("FBX triangle has an invalid vertex index");
+                vertexIndex += static_cast<unsigned int>(baseVertex);
+            }
+            imported.triangles.push_back(triangle);
+        }
+    }
+}
+
+void loadFbxFile(ImportedSceneData &imported, const std::filesystem::path &path)
+{
+    const size_t firstTriangle = imported.triangles.size();
+    std::vector<ImportedSceneData> meshes;
+    Assimp::Importer importer;
+
+    const unsigned int flags =
+        aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs |
+        aiProcess_JoinIdenticalVertices;
+    const aiScene* scene = importer.ReadFile(path.string().c_str(), flags);
+
+    if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0 || !scene->mRootNode)
+    {
+        throw std::runtime_error("Assimp cannot load " + path.string() + ": " +
+                                 importer.GetErrorString());
+    }
+
+    ProcessNode(*scene->mRootNode, *scene, aiMatrix4x4(), meshes);
+    squashMeshes(imported, meshes);
+
+    if (imported.triangles.size() == firstTriangle)
+        throw std::runtime_error("FBX has no non-degenerate triangles: " + path.string());
+}
+
+} // namespace
+
+ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths)
+{
+    if (paths.empty())
+        throw std::runtime_error("Expected at least one file");
+
+    ImportedSceneData imported;
+    for (const auto &path : paths)
+    {
+        std::string extension = path.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+        if (extension == ".obj")
+            loadObjFile(imported, path);
+        else if (extension == ".fbx")
+            loadFbxFile(imported, path);
+        else
+            throw std::runtime_error("Unsupported scene file: " + path.string());
     }
 
     return imported;

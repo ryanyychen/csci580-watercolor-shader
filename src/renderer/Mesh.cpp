@@ -173,7 +173,8 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
     glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<void *>(offsetof(Vertex, texcoord)));
     glBindVertexArray(0);
-    std::cout << "Assembly: " << paths.size() << " OBJ file(s), " << count_ / 3 << " triangles\n";
+    std::cout << "Assembly: " << paths.size() << " scene file(s), " << count_ / 3
+              << " triangles\n";
 
     setupNormalBuffers();
     setupCurveBuffers();

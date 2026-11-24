@@ -102,11 +102,38 @@ void checkSceneMaterialImport()
             "OBJ without an assigned material should use the renderer fallback");
 }
 
+void checkFbxMaterialImport()
+{
+    std::filesystem::path directory = std::filesystem::current_path();
+    std::filesystem::path fbxPath;
+    while (!directory.empty())
+    {
+        const auto candidate = directory / "assets/models/sampleScene.fbx";
+        if (std::filesystem::exists(candidate))
+        {
+            fbxPath = candidate;
+            break;
+        }
+        const auto parent = directory.parent_path();
+        if (parent == directory)
+            break;
+        directory = parent;
+    }
+    require(!fbxPath.empty(), "Could not locate sampleScene.fbx");
+
+    const ImportedSceneData imported = loadSceneFiles({fbxPath});
+    require(!imported.triangles.empty(), "FBX triangles were not imported");
+    require(imported.material.has_value(), "FBX material was not imported");
+    require(glm::length(imported.material->diffuse - glm::vec3(0.8f, 0.0f, 0.0f)) < 1e-5f,
+            "The first FBX material was not selected");
+}
+
 int main()
 {
     try
     {
         checkSceneMaterialImport();
+        checkFbxMaterialImport();
         Camera camera;
         camera.Position_And_Aim_Camera(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0));
         camera.Focus_Camera(1.0f, 2.0f, glm::half_pi<float>());

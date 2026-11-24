@@ -12,6 +12,7 @@ DEPENDENCIES = {
     "imgui": ("https://github.com/ocornut/imgui.git", "v1.92.5"),
     "tinyobjloader": ("https://github.com/tinyobjloader/tinyobjloader.git", "v2.0.0rc13"),
     "eigen": ("https://gitlab.com/libeigen/eigen.git", "3.4.0"),
+    "assimp": ("https://github.com/assimp/assimp.git", "v5.4.3"),
 }
 
 

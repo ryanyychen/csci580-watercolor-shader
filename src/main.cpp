@@ -380,10 +380,10 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     mesh->material_shader = phongShader;
     mesh->direction_shader = directionShader;
 
-    /*
     // Bake a fixed measured pigment over fixed paper on the CPU. To use a fixed
     // mixture, replace pigment with measuredLayerFromMix(...).pigment here.
     // Changing either pigment or paper requires rebuilding this table.
+    /*
     const MeasuredPigment pigment = measuredPigmentFromName("Ultramarine Blue");
     const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
     const auto pigmentColors = createMeasuredPigmentLookup(
