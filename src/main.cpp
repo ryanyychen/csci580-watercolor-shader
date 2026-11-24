@@ -29,6 +29,7 @@ struct Input
 {
     Render_World *world = nullptr;
     bool dragging = false;
+    bool rotateLight = false;
     bool save_screenshot = false;
     bool show_ui = false;
     double lastX = 0, lastY = 0;
@@ -193,7 +194,7 @@ void key(GLFWwindow *window, int k, int, int action, int)
 
 void mouseButton(GLFWwindow *window, int button, int action, int)
 {
-    if (button != GLFW_MOUSE_BUTTON_LEFT)
+    if (button != GLFW_MOUSE_BUTTON_LEFT && button != GLFW_MOUSE_BUTTON_RIGHT)
         return;
     auto &state = input(window);
     if (action == GLFW_RELEASE)
@@ -208,6 +209,10 @@ void mouseButton(GLFWwindow *window, int button, int action, int)
     if (uiCapturesMouse())
         return;
     state.dragging = true;
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+        state.rotateLight = false;
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        state.rotateLight = true;
     // Start each drag at the current cursor position to avoid a camera jump.
     glfwGetCursorPos(window, &state.lastX, &state.lastY);
 }
@@ -215,9 +220,18 @@ void mouseButton(GLFWwindow *window, int button, int action, int)
 void cursor(GLFWwindow *window, double x, double y)
 {
     auto &state = input(window);
-    if (state.dragging && !uiCapturesMouse())
-        state.world->camera.Orbit(static_cast<float>(x - state.lastX),
-                                  static_cast<float>(y - state.lastY));
+    if (state.dragging && !uiCapturesMouse()) {
+        if (!state.rotateLight) {
+            state.world->camera.Orbit(static_cast<float>(x - state.lastX),
+                                    static_cast<float>(y - state.lastY));
+        } else {
+            for (auto &light : state.world->lights) {
+                light.rotateLight(static_cast<float>(x - state.lastX),
+                                    static_cast<float>(y - state.lastY));
+            }
+        }
+    }
+        
     state.lastX = x;
     state.lastY = y;
 }

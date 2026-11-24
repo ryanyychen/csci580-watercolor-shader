@@ -3,6 +3,10 @@
 #include "Object.h"
 #include <memory>
 #include <vector>
+#include <iostream>
+#include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
 
 struct Light
 {
@@ -10,6 +14,19 @@ struct Light
     glm::vec3 position{3.0f, 4.0f, 4.0f};
     glm::vec3 color{1.0f};
     float intensity = 1.0f;
+    glm::vec3 look_at_point_ = glm::vec3(0,1,0); // set a position for the lights to orbit around the model
+
+    void rotateLight(float dx, float dy) {
+      const glm::vec3 offset = position - look_at_point_;
+      const float distance = glm::length(offset);
+      const float yaw = std::atan2(offset.x, offset.z) + glm::radians(dx * 0.3f);
+      const float pitch = std::clamp(std::asin(std::clamp(offset.y / distance, -1.0f, 1.0f)) +
+                                       glm::radians(dy * 0.3f),
+                                   glm::radians(-89.0f), glm::radians(89.0f));
+      position = look_at_point_ + distance * glm::vec3(std::cos(pitch) * std::sin(yaw),
+                                                                  std::sin(pitch),
+                                                                  std::cos(pitch) * std::cos(yaw));
+    }
 };
 
 // Mirrors ../Raytracer/render_world.h, with automatic object ownership.
