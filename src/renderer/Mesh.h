@@ -2,7 +2,6 @@
 #include <array>
 #include <filesystem>
 #include <glm/glm.hpp>
-#include <tiny_obj_loader.h>
 #include <vector>
 #include <glad/gl.h>
 #include "Object.h"
@@ -38,7 +37,7 @@ struct Triangle
 class Mesh : public Object
 {
   public:
-    // Requires a current OpenGL context; imports, normalizes, and uploads the mesh.
+    // Requires a current OpenGL context; imports, processes, and uploads the mesh.
     explicit Mesh(const std::filesystem::path &path);
     // Parts must share an exported coordinate system; normalize the assembly once.
     explicit Mesh(const std::vector<std::filesystem::path> &paths);
@@ -73,7 +72,6 @@ class Mesh : public Object
 
     std::vector<PrincipalCurvature> curvatureData_;
 
-    void createIndexedMesh(const tinyobj::ObjReader reader, size_t baseVertex);
     void populateVertexNeighbors();
     void populateVertexNormals();
     void populateVertexCurvatures();

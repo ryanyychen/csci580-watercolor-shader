@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include "SceneImporter.h"
 #include <Eigen/Dense>
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -26,17 +27,6 @@ struct Vertex
     float k2;
 
 };
-
-glm::vec3 positionAt(const tinyobj::attrib_t &attributes, int index)
-{
-    if (index < 0 || static_cast<size_t>(index) >= attributes.vertices.size() / 3)
-        throw std::runtime_error("OBJ has an invalid position index");
-    const size_t i = static_cast<size_t>(index) * 3;
-    glm::vec3 p(attributes.vertices[i], attributes.vertices[i + 1], attributes.vertices[i + 2]);
-    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
-        throw std::runtime_error("OBJ has a non-finite position");
-    return p;
-}
 } // namespace
 
 Mesh::Mesh(const std::filesystem::path &path) : Mesh(std::vector<std::filesystem::path>{path})
@@ -45,106 +35,34 @@ Mesh::Mesh(const std::filesystem::path &path) : Mesh(std::vector<std::filesystem
 
 Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
 {
-    if (paths.empty())
-        throw std::runtime_error("Expected at least one OBJ file");
-
+    const ImportedSceneData imported = loadSceneFiles(paths);
     std::vector<Vertex> vertices; // expanded vertex data for rendering
     std::vector<unsigned int> sourceVertexIndices;
-    // Append parts in their original coordinates, then fit the combined bounds.
-    // Centering individual files would stack wheels, wings, and body at the origin.
-    for (const auto &path : paths)
+    vertices.reserve(imported.triangles.size() * 3);
+    sourceVertexIndices.reserve(imported.triangles.size() * 3);
+    uvTriangles_.reserve(imported.triangles.size());
+    hasTextureCoordinates_ = imported.hasTextureCoordinates;
+
+    for (const glm::vec3 &position : imported.positions)
     {
-        const size_t firstVertex = vertices.size();
-        tinyobj::ObjReader reader;
-        tinyobj::ObjReaderConfig config;
+        GeometryVertex vertex{};
+        vertex.position = position;
+        vertex.normal = glm::vec3(0.0f);
+        vertices_.push_back(vertex);
+    }
 
-        // Polygon conversion happens on the CPU; the GPU receives triangles only.
-        config.triangulate = true;
-        config.mtl_search_path = path.parent_path().string();
-
-        if (!reader.ParseFromFile(path.string(), config))
-            throw std::runtime_error("Cannot load OBJ " + path.string() + ": " + reader.Error());
-        if (!reader.Warning().empty())
-            std::cerr << reader.Warning();
-
-        size_t baseVertex = vertices_.size();
-        createIndexedMesh(reader, baseVertex);
-
-        const auto &attributes = reader.GetAttrib();
-
-        // Expand triangles to support OBJ's independent position/normal indices.
-        for (const auto &shape : reader.GetShapes())
+    for (const ImportedSceneTriangle &triangle : imported.triangles)
+    {
+        triangles_.push_back({triangle.vertexIndices[0], triangle.vertexIndices[1],
+                              triangle.vertexIndices[2]});
+        for (int i = 0; i < 3; ++i)
         {
-            size_t offset = 0;
-            for (const auto faceSize : shape.mesh.num_face_vertices)
-            {
-                if (faceSize != 3)
-                    throw std::runtime_error(
-                        "OBJ triangulation failed; export a triangulated mesh");
-
-                const auto *indices = shape.mesh.indices.data() + offset;
-                glm::vec3 p[3];
-
-                for (int i = 0; i < 3; ++i)
-                    p[i] = positionAt(attributes, indices[i].vertex_index);
-
-                // Cross-product length is twice the triangle area. Zero-area faces have
-                // no usable normal, so skip them before normalization.
-                glm::vec3 faceNormal = glm::cross(p[1] - p[0], p[2] - p[0]);
-                const float area = glm::length(faceNormal);
-                offset += 3;
-
-                if (area < 1e-12f || !std::isfinite(area))
-                    continue;
-                faceNormal /= area;
-
-                for (int i = 0; i < 3; ++i)
-                {
-                    // Prefer exported per-corner normals for smooth/hard-edge shading.
-                    // Missing or unusable normals fall back to this triangle's flat normal.
-                    glm::vec3 normal = faceNormal;
-                    const int normalIndex = indices[i].normal_index;
-                    if (normalIndex >= 0 &&
-                        static_cast<size_t>(normalIndex) < attributes.normals.size() / 3)
-                    {
-                        const size_t n = static_cast<size_t>(normalIndex) * 3;
-                        glm::vec3 supplied(attributes.normals[n], attributes.normals[n + 1],
-                                           attributes.normals[n + 2]);
-                        const float length = glm::length(supplied);
-                        if (length > 1e-12f && std::isfinite(length))
-                            normal = supplied / length;
-                    }
-                    const int texcoordIndex = indices[i].texcoord_index;
-                    glm::vec2 texcoord(0.0f);
-                    if (texcoordIndex >= 0 &&
-                        static_cast<size_t>(texcoordIndex) < attributes.texcoords.size() / 2)
-                    {
-                        const size_t t = static_cast<size_t>(texcoordIndex) * 2;
-                        texcoord = glm::vec2(attributes.texcoords[t], attributes.texcoords[t + 1]);
-                        if (!std::isfinite(texcoord.x) || !std::isfinite(texcoord.y))
-                            hasTextureCoordinates_ = false;
-                    }
-                    else
-                    {
-                        hasTextureCoordinates_ = false;
-                    }
-                    vertices.push_back({p[i], normal, texcoord, 0.0f, 0.0f});
-                    sourceVertexIndices.push_back(
-                        static_cast<unsigned int>(baseVertex + indices[i].vertex_index));
-                }
-                uvTriangles_.push_back({
-                    {sourceVertexIndices[sourceVertexIndices.size() - 3],
-                     sourceVertexIndices[sourceVertexIndices.size() - 2],
-                     sourceVertexIndices[sourceVertexIndices.size() - 1]},
-                    {vertices[vertices.size() - 3].texcoord,
-                     vertices[vertices.size() - 2].texcoord,
-                     vertices[vertices.size() - 1].texcoord}});
-            }
+            const unsigned int vertexIndex = triangle.vertexIndices[i];
+            vertices.push_back({imported.positions[vertexIndex], triangle.normals[i],
+                                triangle.texcoords[i], 0.0f, 0.0f});
+            sourceVertexIndices.push_back(vertexIndex);
         }
-        if (vertices.size() == firstVertex)
-            throw std::runtime_error("OBJ has no non-degenerate triangles: " + path.string());
-        std::cout << "Loaded " << path << ": " << (vertices.size() - firstVertex) / 3
-                  << " triangles\n";
+        uvTriangles_.push_back({triangle.vertexIndices, triangle.texcoords});
     }
 
     if (vertices.size() > static_cast<size_t>(std::numeric_limits<GLsizei>::max()))
@@ -251,108 +169,6 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
 
     setupNormalBuffers();
     setupCurveBuffers();
-}
-
-// create indexed mesh by populating vertices_ and triangles_ from obj reader 
-// baseVertex specifies the index offset to account for multiple objects 
-void Mesh::createIndexedMesh(
-    tinyobj::ObjReader reader,
-    size_t baseVertex)
-{
-    const auto& attributes = reader.GetAttrib();
-
-    // 1. Append this OBJ's unique positions.
-    const size_t numVertices = attributes.vertices.size() / 3;
-
-    const size_t maxIndex =
-        static_cast<size_t>(std::numeric_limits<unsigned int>::max());
-
-    if (baseVertex > maxIndex || numVertices > maxIndex - baseVertex)
-        throw std::overflow_error("Too many geometry vertices");
-
-    for (size_t i = 0; i < numVertices; ++i)
-    {
-        const size_t index = i * 3;
-
-        glm::vec3 position(
-            attributes.vertices[index],
-            attributes.vertices[index + 1],
-            attributes.vertices[index + 2]
-        );
-
-        if (!std::isfinite(position.x) ||
-            !std::isfinite(position.y) ||
-            !std::isfinite(position.z))
-        {
-            throw std::runtime_error("OBJ has a non-finite position");
-        }
-
-        GeometryVertex vertex{};
-        vertex.position = position;
-        vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f);
-
-        vertices_.push_back(vertex);
-    }
-
-    // 2. Read triangle connectivity.
-    const auto& shapes = reader.GetShapes();
-
-    for (const auto& shape : shapes)
-    {
-        const auto& mesh = shape.mesh;
-        size_t indexOffset = 0;
-
-        for (unsigned char faceSize : mesh.num_face_vertices)
-        {
-            if (indexOffset > mesh.indices.size() ||
-                faceSize > mesh.indices.size() - indexOffset)
-            {
-                throw std::runtime_error("Invalid OBJ face indices");
-            }
-
-            if (faceSize != 3)
-            {
-                throw std::runtime_error(
-                    "OBJ triangulation failed; expected triangles"
-                );
-            }
-
-            // 3. Retrieve and validate the local OBJ indices.
-            int i0 = mesh.indices[indexOffset + 0].vertex_index;
-            int i1 = mesh.indices[indexOffset + 1].vertex_index;
-            int i2 = mesh.indices[indexOffset + 2].vertex_index;
-
-            if (i0 < 0 || i1 < 0 || i2 < 0 ||
-                static_cast<size_t>(i0) >= numVertices ||
-                static_cast<size_t>(i1) >= numVertices ||
-                static_cast<size_t>(i2) >= numVertices)
-            {
-                throw std::runtime_error("OBJ has an invalid position index");
-            }
-
-            // 4. Convert local indices to global geometry indices.
-            unsigned int v0 = static_cast<unsigned int>(baseVertex + i0);
-            unsigned int v1 = static_cast<unsigned int>(baseVertex + i1);
-            unsigned int v2 = static_cast<unsigned int>(baseVertex + i2);
-
-            // 5. Skip degenerate triangles.
-            const glm::vec3& p0 = vertices_[v0].position;
-            const glm::vec3& p1 = vertices_[v1].position;
-            const glm::vec3& p2 = vertices_[v2].position;
-
-            glm::vec3 crossProduct =
-                glm::cross(p1 - p0, p2 - p0);
-
-            float area = glm::length(crossProduct);
-
-            if (area >= 1e-12f && std::isfinite(area))
-            {
-                triangles_.push_back({v0, v1, v2});
-            }
-
-            indexOffset += faceSize;
-        }
-    }
 }
 
 void Mesh::populateVertexNeighbors() {
