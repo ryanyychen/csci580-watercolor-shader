@@ -3,7 +3,16 @@
 #include <array>
 #include <filesystem>
 #include <glm/glm.hpp>
+#include <optional>
 #include <vector>
+
+struct ImportedMaterial
+{
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+    float shininess;
+};
 
 struct ImportedSceneTriangle
 {
@@ -16,6 +25,7 @@ struct ImportedSceneData
 {
     std::vector<glm::vec3> positions;
     std::vector<ImportedSceneTriangle> triangles;
+    std::optional<ImportedMaterial> material;
     bool hasTextureCoordinates = true;
 };
 

@@ -16,10 +16,11 @@ struct Material
 {
     // Ambient/diffuse colors tint the surface; specular color tints the highlight.
     // Higher specular_power produces a narrower Phong highlight.
-    glm::vec3 color_ambient{0.22f, 0.48f, 0.65f};
-    glm::vec3 color_diffuse{0.22f, 0.48f, 0.65f};
-    glm::vec3 color_specular{0.5f};
-    float specular_power = 32.0f;
+    // These copper values are the fallback when an imported OBJ has no material.
+    glm::vec3 color_ambient{0.45f, 0.16f, 0.06f};
+    glm::vec3 color_diffuse{0.45f, 0.16f, 0.06f};
+    glm::vec3 color_specular{0.60f};
+    float specular_power = 48.0f;
 
     // Texture pointers are owned by Object and released in its destructor.
     Texture * texture = nullptr;

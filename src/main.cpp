@@ -2,6 +2,7 @@
 #include "renderer/Image_Output.h"
 #include "renderer/Mesh.h"
 #include "renderer/ModeLabel.h"
+#include "renderer/KubelkaMunk.h"
 #include "renderer/PigmentLookup.h"
 #include "renderer/Shader.h"
 #include "renderer/TextureGenerator.h"
@@ -379,14 +380,7 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     mesh->material_shader = phongShader;
     mesh->direction_shader = directionShader;
 
-    // Scene setup: object material, world lights, and camera.
-    // Copper diffuse/ambient with a neutral highlight makes the three Phong
-    // contributions readable without an unrelated blue tint in shadowed regions.
-    mesh->material.color_diffuse = glm::vec3(0.45f, 0.16f, 0.06f);
-    mesh->material.color_ambient = mesh->material.color_diffuse;
-    mesh->material.color_specular = glm::vec3(0.60f);
-    mesh->material.specular_power = 48.0f;
-
+    /*
     // Bake a fixed measured pigment over fixed paper on the CPU. To use a fixed
     // mixture, replace pigment with measuredLayerFromMix(...).pigment here.
     // Changing either pigment or paper requires rebuilding this table.
@@ -396,6 +390,14 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
     mesh->material.pigmentLookup =
         new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
+    */
+
+    // Choose pigment based on object diffuse color instead of hardcoding to blue
+    const Pigment pigment = pigmentFromRGB(mesh->material.color_diffuse);
+    const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
+    const auto pigmentColors = createPigmentLookup(
+        pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
+    mesh->material.pigmentLookup = new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
     
     // Generate noise textures for watercolor shading.
     WatercolorSettings noiseSettings;

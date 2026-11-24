@@ -2,8 +2,10 @@
 #include "renderer/Image_Output.h"
 #include "renderer/TextureGenerator.h"
 #include "renderer/PigmentLookup.h"
+#include "renderer/SceneImporter.h"
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -20,10 +22,91 @@ void require(bool condition, const char *message)
         throw std::runtime_error(message);
 }
 
+void checkSceneMaterialImport()
+{
+    const auto suffix = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto directory =
+        std::filesystem::temp_directory_path() / ("watercolor-import-check-" + suffix);
+    require(std::filesystem::create_directory(directory),
+            "Could not create temporary scene-import directory");
+    struct DirectoryCleanup
+    {
+        std::filesystem::path path;
+        ~DirectoryCleanup()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    } cleanup{directory};
+
+    const auto objPath = directory / "material.obj";
+    const auto mtlPath = directory / "material.mtl";
+    {
+        std::ofstream obj(objPath);
+        obj << "mtllib material.mtl\n"
+               "v 0 0 0\n"
+               "v 1 0 0\n"
+               "v 0 1 0\n"
+               "v 2 0 0\n"
+               "v 3 0 0\n"
+               "v 2 1 0\n"
+               "vt 0 0\n"
+               "vt 1 0\n"
+               "vt 0 1\n"
+               "vn 0 0 1\n"
+               "usemtl testMaterial\n"
+               "f 1/1/1 2/2/1 3/3/1\n"
+               "usemtl laterMaterial\n"
+               "f 4/1/1 5/2/1 6/3/1\n";
+        require(static_cast<bool>(obj), "Could not write temporary OBJ");
+    }
+    {
+        std::ofstream mtl(mtlPath);
+        mtl << "newmtl testMaterial\n"
+               "Ka 0.1 0.2 0.3\n"
+               "Kd 0.8 0.1 0.2\n"
+               "Ks 0.4 0.5 0.6\n"
+               "Ns 24\n"
+               "newmtl laterMaterial\n"
+               "Ka 0 1 0\n"
+               "Kd 0 1 0\n"
+               "Ks 0 1 0\n"
+               "Ns 4\n";
+        require(static_cast<bool>(mtl), "Could not write temporary MTL");
+    }
+
+    const ImportedSceneData imported = loadSceneFiles({objPath});
+    require(imported.material.has_value(), "Assigned OBJ material was not imported");
+    require(imported.triangles.size() == 2, "OBJ triangles were not imported");
+    require(glm::length(imported.material->ambient - glm::vec3(0.1f, 0.2f, 0.3f)) < 1e-6f,
+            "OBJ ambient material color was not imported");
+    require(glm::length(imported.material->diffuse - glm::vec3(0.8f, 0.1f, 0.2f)) < 1e-6f,
+            "OBJ diffuse material color was not imported");
+    require(glm::length(imported.material->specular - glm::vec3(0.4f, 0.5f, 0.6f)) < 1e-6f,
+            "OBJ specular material color was not imported");
+    require(std::abs(imported.material->shininess - 24.0f) < 1e-6f,
+            "OBJ material shininess was not imported");
+
+    const auto plainObjPath = directory / "plain.obj";
+    {
+        std::ofstream obj(plainObjPath);
+        obj << "v 0 0 0\n"
+               "v 1 0 0\n"
+               "v 0 1 0\n"
+               "f 1 2 3\n";
+        require(static_cast<bool>(obj), "Could not write temporary OBJ without a material");
+    }
+    const ImportedSceneData withoutMaterial = loadSceneFiles({plainObjPath});
+    require(!withoutMaterial.material.has_value(),
+            "OBJ without an assigned material should use the renderer fallback");
+}
+
 int main()
 {
     try
     {
+        checkSceneMaterialImport();
         Camera camera;
         camera.Position_And_Aim_Camera(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0));
         camera.Focus_Camera(1.0f, 2.0f, glm::half_pi<float>());
@@ -214,7 +297,7 @@ int main()
         }
         require(invalidLookupRejected, "Pigment lookup accepted fewer than two samples");
 
-        std::cout << "Camera, PPM, LIC, and spectral pigment lookup checks passed\n";
+        std::cout << "Scene import, camera, PPM, LIC, and spectral pigment lookup checks passed\n";
         return 0;
     }
     catch (const std::exception &error)

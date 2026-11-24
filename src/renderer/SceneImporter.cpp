@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 namespace
@@ -19,6 +20,50 @@ glm::vec3 positionAt(const tinyobj::attrib_t &attributes, int index)
         !std::isfinite(position.z))
         throw std::runtime_error("OBJ has a non-finite position");
     return position;
+}
+
+std::optional<ImportedMaterial> assignedMaterial(
+    const tinyobj::ObjReader &reader, const std::filesystem::path &path)
+{
+    const auto &materials = reader.GetMaterials();
+    std::optional<int> assignedId;
+
+    for (const auto &shape : reader.GetShapes())
+    {
+        if (shape.mesh.material_ids.size() != shape.mesh.num_face_vertices.size())
+            throw std::runtime_error("OBJ material assignments do not match its faces: " +
+                                     path.string());
+
+        for (const int materialId : shape.mesh.material_ids)
+        {
+            if (materialId < 0)
+                continue;
+            if (static_cast<size_t>(materialId) >= materials.size())
+                throw std::runtime_error("OBJ has an invalid material assignment: " +
+                                         path.string());
+            if (!assignedId)
+                assignedId = materialId;
+        }
+    }
+
+    if (!assignedId)
+        return std::nullopt;
+
+    const tinyobj::material_t &source = materials[static_cast<size_t>(*assignedId)];
+    ImportedMaterial material{
+        glm::vec3(source.ambient[0], source.ambient[1], source.ambient[2]),
+        glm::vec3(source.diffuse[0], source.diffuse[1], source.diffuse[2]),
+        glm::vec3(source.specular[0], source.specular[1], source.specular[2]),
+        static_cast<float>(source.shininess)};
+    if (!std::isfinite(material.ambient.x) || !std::isfinite(material.ambient.y) ||
+        !std::isfinite(material.ambient.z) || !std::isfinite(material.diffuse.x) ||
+        !std::isfinite(material.diffuse.y) || !std::isfinite(material.diffuse.z) ||
+        !std::isfinite(material.specular.x) || !std::isfinite(material.specular.y) ||
+        !std::isfinite(material.specular.z) || !std::isfinite(material.shininess) ||
+        material.shininess < 0.0f)
+        throw std::runtime_error("OBJ material contains invalid values: " + path.string());
+
+    return material;
 }
 
 } // namespace
@@ -42,6 +87,10 @@ ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths
             throw std::runtime_error("Cannot load OBJ " + path.string() + ": " + reader.Error());
         if (!reader.Warning().empty())
             std::cerr << reader.Warning();
+
+        const auto pathMaterial = assignedMaterial(reader, path);
+        if (!imported.material && pathMaterial)
+            imported.material = pathMaterial;
 
         const auto &attributes = reader.GetAttrib();
         const size_t baseVertex = imported.positions.size();

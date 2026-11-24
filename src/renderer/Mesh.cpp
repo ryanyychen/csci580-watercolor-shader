@@ -36,6 +36,14 @@ Mesh::Mesh(const std::filesystem::path &path) : Mesh(std::vector<std::filesystem
 Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
 {
     const ImportedSceneData imported = loadSceneFiles(paths);
+    if (imported.material)
+    {
+        material.color_ambient = imported.material->ambient;
+        material.color_diffuse = imported.material->diffuse;
+        material.color_specular = imported.material->specular;
+        material.specular_power = imported.material->shininess;
+    }
+
     std::vector<Vertex> vertices; // expanded vertex data for rendering
     std::vector<unsigned int> sourceVertexIndices;
     vertices.reserve(imported.triangles.size() * 3);
