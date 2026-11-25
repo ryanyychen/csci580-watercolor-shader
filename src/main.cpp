@@ -5,6 +5,7 @@
 #include "renderer/KubelkaMunk.h"
 #include "renderer/PigmentLookup.h"
 #include "renderer/Shader.h"
+#include "renderer/SceneImporter.h"
 #include "renderer/TextureGenerator.h"
 #include "renderer/WatercolorSim.h"
 #include "renderer/UI.h"
@@ -279,10 +280,12 @@ void drawPaperOverlay(
     glEnable(GL_DEPTH_TEST);
 }
 
-void updateNoiseTexture(
-    Mesh &mesh, int minimumGridSize, int textureSize,
+void updateNoiseTextures(
+    const std::vector<Mesh *> &meshes, int minimumGridSize, int textureSize,
     int octaveCount, float persistence, float lacunarity)
 {
+    if (meshes.empty())
+        throw std::invalid_argument("At least one mesh is required for noise textures");
     if (textureSize <= 0)
         throw std::invalid_argument("Perlin texture size must be positive");
     if (octaveCount <= 0)
@@ -305,66 +308,84 @@ void updateNoiseTexture(
         textureSize};
     if (noiseValues.rows == nullptr)
         throw std::runtime_error("Failed to allocate Perlin noise texture");
-    auto noiseTexture = std::make_unique<Texture>(textureSize, textureSize, noiseValues.rows);
-    std::array<std::unique_ptr<Texture>, 2> licTextures;
-    std::array<std::array<std::unique_ptr<Texture>, 6>, 2> triplanarLICTextures;
+    auto noiseTexture =
+        std::make_shared<Texture>(textureSize, textureSize, noiseValues.rows);
 
     const PrincipalDirection directions[2] = {
         PrincipalDirection::Dir1, PrincipalDirection::Dir2};
-    if (mesh.usesUVNoiseMapping())
+    struct MeshLICTextures
     {
-        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
-        {
-            const auto directionField = mesh.createPrincipalDirectionField(
-                textureSize, directions[directionIndex]);
-            FloatTextureData licValues{
-                createLineIntegralConvolutionTexture(
-                    textureSize, noiseValues.rows, directionField),
-                textureSize};
-            if (licValues.rows == nullptr)
-                throw std::runtime_error("Failed to allocate LIC texture");
-            licTextures[directionIndex] =
-                std::make_unique<Texture>(textureSize, textureSize, licValues.rows);
-        }
-    }
-    else
+        Mesh *mesh;
+        std::array<std::unique_ptr<Texture>, 2> licTextures;
+        std::array<std::array<std::unique_ptr<Texture>, 6>, 2> triplanarLICTextures;
+    };
+    std::vector<MeshLICTextures> meshLICTextures;
+    meshLICTextures.reserve(meshes.size());
+    for (Mesh *mesh : meshes)
     {
-        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+        if (mesh == nullptr)
+            throw std::invalid_argument("Noise textures require valid meshes");
+
+        MeshLICTextures textures{mesh, {}, {}};
+        if (mesh->usesUVNoiseMapping())
         {
-            const auto directionFields = mesh.createTriplanarPrincipalDirectionFields(
-                textureSize, directions[directionIndex]);
-            for (size_t projectionIndex = 0; projectionIndex < directionFields.size();
-                 ++projectionIndex)
+            for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
             {
+                const auto directionField = mesh->createPrincipalDirectionField(
+                    textureSize, directions[directionIndex]);
                 FloatTextureData licValues{
                     createLineIntegralConvolutionTexture(
-                        textureSize, noiseValues.rows,
-                        directionFields[projectionIndex]),
+                        textureSize, noiseValues.rows, directionField),
                     textureSize};
                 if (licValues.rows == nullptr)
-                    throw std::runtime_error("Failed to allocate triplanar LIC texture");
-                triplanarLICTextures[directionIndex][projectionIndex] =
+                    throw std::runtime_error("Failed to allocate LIC texture");
+                textures.licTextures[directionIndex] =
                     std::make_unique<Texture>(textureSize, textureSize, licValues.rows);
             }
         }
+        else
+        {
+            for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+            {
+                const auto directionFields = mesh->createTriplanarPrincipalDirectionFields(
+                    textureSize, directions[directionIndex]);
+                for (size_t projectionIndex = 0; projectionIndex < directionFields.size();
+                     ++projectionIndex)
+                {
+                    FloatTextureData licValues{
+                        createLineIntegralConvolutionTexture(
+                            textureSize, noiseValues.rows,
+                            directionFields[projectionIndex]),
+                        textureSize};
+                    if (licValues.rows == nullptr)
+                        throw std::runtime_error("Failed to allocate triplanar LIC texture");
+                    textures.triplanarLICTextures[directionIndex][projectionIndex] =
+                        std::make_unique<Texture>(textureSize, textureSize, licValues.rows);
+                }
+            }
+        }
+        meshLICTextures.push_back(std::move(textures));
     }
 
-    Material &material = mesh.material;
-    delete material.texture;
-    material.texture = noiseTexture.release();
-    for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
+    for (MeshLICTextures &textures : meshLICTextures)
     {
-        delete material.licTextures[directionIndex];
-        material.licTextures[directionIndex] = licTextures[directionIndex].release();
-        for (size_t projectionIndex = 0; projectionIndex < 6; ++projectionIndex)
+        Material &material = textures.mesh->material;
+        material.texture = noiseTexture;
+        for (size_t directionIndex = 0; directionIndex < 2; ++directionIndex)
         {
-            delete material.triplanarLICTextures[directionIndex][projectionIndex];
-            material.triplanarLICTextures[directionIndex][projectionIndex] =
-                triplanarLICTextures[directionIndex][projectionIndex].release();
+            delete material.licTextures[directionIndex];
+            material.licTextures[directionIndex] =
+                textures.licTextures[directionIndex].release();
+            for (size_t projectionIndex = 0; projectionIndex < 6; ++projectionIndex)
+            {
+                delete material.triplanarLICTextures[directionIndex][projectionIndex];
+                material.triplanarLICTextures[directionIndex][projectionIndex] =
+                    textures.triplanarLICTextures[directionIndex][projectionIndex].release();
+            }
         }
+        material.useMeshTextureCoordinates = textures.mesh->usesUVNoiseMapping();
+        material.useTriplanarNoise = !textures.mesh->usesUVNoiseMapping();
     }
-    material.useMeshTextureCoordinates = mesh.usesUVNoiseMapping();
-    material.useTriplanarNoise = !mesh.usesUVNoiseMapping();
 }
 
 void run(GLFWwindow *window, const std::filesystem::path &resources,
@@ -376,41 +397,49 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
     createShaders(resources);
     UI noiseUI;
     Render_World world;
-    auto mesh = std::make_unique<Mesh>(meshPaths);
-    mesh->material_shader = phongShader;
-    mesh->direction_shader = directionShader;
+    ImportedSceneData imported = loadSceneFiles(meshPaths);
+    std::vector<ImportedSceneData> meshDataList = loadSceneMeshes(meshPaths);
+    std::vector<Mesh *> meshes;
+    meshes.reserve(meshDataList.size());
+    bool placeAtCenter = (meshDataList.size() > 1) ? false : true;
+    for (const ImportedSceneData &meshData : meshDataList) {
+        auto mesh = std::make_unique<Mesh>(meshData, placeAtCenter);
+        mesh->material_shader = phongShader;
+        mesh->direction_shader = directionShader;
 
-    // Bake a fixed measured pigment over fixed paper on the CPU. To use a fixed
-    // mixture, replace pigment with measuredLayerFromMix(...).pigment here.
-    // Changing either pigment or paper requires rebuilding this table.
-    /*
-    const MeasuredPigment pigment = measuredPigmentFromName("Ultramarine Blue");
-    const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
-    const auto pigmentColors = createMeasuredPigmentLookup(
-        pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
-    mesh->material.pigmentLookup =
-        new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
-    */
+        // Bake a fixed measured pigment over fixed paper on the CPU. To use a fixed
+        // mixture, replace pigment with measuredLayerFromMix(...).pigment here.
+        // Changing either pigment or paper requires rebuilding this table.
+        /*
+        const MeasuredPigment pigment = measuredPigmentFromName("Ultramarine Blue");
+        const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
+        const auto pigmentColors = createMeasuredPigmentLookup(
+            pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
+        mesh->material.pigmentLookup =
+            new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
+        */
 
-    // Choose pigment based on object diffuse color instead of hardcoding to blue
-    const Pigment pigment = pigmentFromRGB(mesh->material.color_diffuse);
-    const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
-    const auto pigmentColors = createPigmentLookup(
-        pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
-    mesh->material.pigmentLookup = new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
-    
-    // Generate noise textures for watercolor shading.
+        // Choose pigment based on object diffuse color instead of hardcoding to blue
+        const Pigment pigment = pigmentFromRGB(mesh->material.color_diffuse);
+        const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
+        const auto pigmentColors = createPigmentLookup(
+            pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
+        mesh->material.pigmentLookup = new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
+
+        meshes.push_back(mesh.get());
+        world.objects.push_back(std::move(mesh));
+    }
     WatercolorSettings noiseSettings;
-    noiseSettings.licBias = mesh->material.licBias;
-    noiseSettings.licGain = mesh->material.licGain;
+    if (!world.objects.empty())
+    {
+        noiseSettings.licBias = world.objects.front()->material.licBias;
+        noiseSettings.licGain = world.objects.front()->material.licGain;
+    }
     constexpr int noiseGridSize = 256;
-    const int noiseTextureSize = 256;
-    updateNoiseTexture(
-        *mesh, noiseGridSize, noiseTextureSize,
+    constexpr int noiseTextureSize = 256;
+    updateNoiseTextures(
+        meshes, noiseGridSize, noiseTextureSize,
         noiseSettings.octaveCount, noiseSettings.persistence, noiseSettings.lacunarity);
-
-    Mesh *meshForNoiseUpdates = mesh.get();
-    world.objects.push_back(std::move(mesh));
     // An off-axis white key light gives a clear lit-to-shadow transition.
     // Keep its strength below one so the highlight retains headroom.
     world.lights.front().position = glm::vec3(-3.0f, 4.0f, 5.0f);
@@ -486,13 +515,14 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         if (state.show_ui && currentShader == ShaderType::Watercolor)
         {
             const UIChanges changes =
-                noiseUI.drawUI(noiseSettings, meshForNoiseUpdates->material.useLIC);
+                noiseUI.drawUI(
+                    noiseSettings, world.objects.front()->material.useLIC);
             if (changes.perlinSettingsChanged)
             {
                 try
                 {
-                    updateNoiseTexture(
-                        *meshForNoiseUpdates, noiseGridSize, noiseTextureSize,
+                    updateNoiseTextures(
+                        meshes, noiseGridSize, noiseTextureSize,
                         noiseSettings.octaveCount, noiseSettings.persistence,
                         noiseSettings.lacunarity);
                 }
@@ -503,8 +533,11 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
             }
             if (changes.licSettingsChanged)
             {
-                meshForNoiseUpdates->material.licBias = noiseSettings.licBias;
-                meshForNoiseUpdates->material.licGain = noiseSettings.licGain;
+                for (const auto &object : world.objects)
+                {
+                    object->material.licBias = noiseSettings.licBias;
+                    object->material.licGain = noiseSettings.licGain;
+                }
             }
         }
 

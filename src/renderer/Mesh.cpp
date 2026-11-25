@@ -1,5 +1,4 @@
 #include "Mesh.h"
-#include "SceneImporter.h"
 #include <Eigen/Dense>
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -34,8 +33,11 @@ Mesh::Mesh(const std::filesystem::path &path) : Mesh(std::vector<std::filesystem
 }
 
 Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
+    : Mesh(loadSceneFiles(paths))
 {
-    const ImportedSceneData imported = loadSceneFiles(paths);
+}
+
+Mesh::Mesh(const ImportedSceneData &imported, bool centerMesh) {
     if (imported.material)
     {
         material.color_ambient = imported.material->ambient;
@@ -76,27 +78,28 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
     if (vertices.size() > static_cast<size_t>(std::numeric_limits<GLsizei>::max()))
         throw std::runtime_error("OBJ is too large for one draw call");
 
-    glm::vec3 lo = vertices.front().position, hi = lo;
-    // Fit arbitrary input units into the default camera's view without distortion.
-    // Uniform scaling preserves the directions of the imported normals.
-    for (const auto &v : vertices)
-    {
-        lo = glm::min(lo, v.position);
-        hi = glm::max(hi, v.position);
+    if (centerMesh) {
+        glm::vec3 lo = vertices.front().position, hi = lo;
+        // Fit arbitrary input units into the default camera's view without distortion.
+        // Uniform scaling preserves the directions of the imported normals.
+        for (const auto &v : vertices)
+        {
+            lo = glm::min(lo, v.position);
+            hi = glm::max(hi, v.position);
+        }
+
+        const glm::vec3 center = lo * 0.5f + hi * 0.5f;
+        const glm::vec3 extent = hi - lo;
+        const float span = std::max({extent.x, extent.y, extent.z});
+        if (!std::isfinite(span) || span <= 0.0f)
+            throw std::runtime_error("OBJ bounds cannot be normalized");
+
+        for (auto &v : vertices)
+            v.position = (v.position - center) * (2.0f / span);
+
+        for (auto &v : vertices_)
+            v.position = (v.position - center) * (2.0f / span);
     }
-
-    const glm::vec3 center = lo * 0.5f + hi * 0.5f;
-    const glm::vec3 extent = hi - lo;
-    const float span = std::max({extent.x, extent.y, extent.z});
-    if (!std::isfinite(span) || span <= 0.0f)
-        throw std::runtime_error("OBJ bounds cannot be normalized");
-
-    for (auto &v : vertices)
-        v.position = (v.position - center) * (2.0f / span);
-
-    for (auto &v : vertices_)
-        v.position = (v.position - center) * (2.0f / span);
-
     if (hasTextureCoordinates_)
     {
         glm::vec2 uvMin(std::numeric_limits<float>::max());
@@ -173,8 +176,7 @@ Mesh::Mesh(const std::vector<std::filesystem::path> &paths)
     glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<void *>(offsetof(Vertex, texcoord)));
     glBindVertexArray(0);
-    std::cout << "Assembly: " << paths.size() << " scene file(s), " << count_ / 3
-              << " triangles\n";
+    std::cout << "Assembly: " << count_ / 3 << " triangles\n";
 
     setupNormalBuffers();
     setupCurveBuffers();

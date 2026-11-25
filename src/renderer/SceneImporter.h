@@ -29,4 +29,5 @@ struct ImportedSceneData
     bool hasTextureCoordinates = true;
 };
 
-ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths);
+ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths); // squash all mesh data into one sceneData object
+std::vector<ImportedSceneData> loadSceneMeshes(const std::vector<std::filesystem::path> &paths);

@@ -379,9 +379,8 @@ void squashMeshes(ImportedSceneData &imported,
     }
 }
 
-void loadFbxFile(ImportedSceneData &imported, const std::filesystem::path &path)
+std::vector<ImportedSceneData> loadFbxFile(const std::filesystem::path &path)
 {
-    const size_t firstTriangle = imported.triangles.size();
     std::vector<ImportedSceneData> meshes;
     Assimp::Importer importer;
 
@@ -397,14 +396,13 @@ void loadFbxFile(ImportedSceneData &imported, const std::filesystem::path &path)
     }
 
     ProcessNode(*scene->mRootNode, *scene, aiMatrix4x4(), meshes);
-    squashMeshes(imported, meshes);
 
-    if (imported.triangles.size() == firstTriangle)
-        throw std::runtime_error("FBX has no non-degenerate triangles: " + path.string());
+    return meshes;
 }
 
 } // namespace
 
+// load all scene files and squash them into one mesh
 ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths)
 {
     if (paths.empty())
@@ -419,12 +417,47 @@ ImportedSceneData loadSceneFiles(const std::vector<std::filesystem::path> &paths
                 return static_cast<char>(std::tolower(ch));
             });
         if (extension == ".obj")
+        {
             loadObjFile(imported, path);
+        }
         else if (extension == ".fbx")
-            loadFbxFile(imported, path);
-        else
+        {
+            const size_t firstTriangle = imported.triangles.size();
+            auto meshes = loadFbxFile(path);
+            squashMeshes(imported, meshes);
+            if (imported.triangles.size() == firstTriangle)
+                throw std::runtime_error("FBX has no non-degenerate triangles: " + path.string());
+        }
+        else {
             throw std::runtime_error("Unsupported scene file: " + path.string());
+        }
     }
 
     return imported;
+}
+
+// Keep mesh data separate per object
+std::vector<ImportedSceneData> loadSceneMeshes(const std::vector<std::filesystem::path> &paths)
+{
+    if (paths.empty())
+        throw std::runtime_error("Expected at least one file");
+    std::vector<ImportedSceneData> meshes;
+    for (const auto &path : paths) {
+        std::string extension = path.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+        if (extension == ".obj") {
+            ImportedSceneData meshData;
+            loadObjFile(meshData, path);
+            meshes.push_back(meshData);
+        } else if (extension == ".fbx") {
+            std::vector<ImportedSceneData> fbxData = loadFbxFile(path);
+            meshes.insert(meshes.end(), fbxData.begin(), fbxData.end());
+        } else {
+            throw std::runtime_error("Unsupported scene file: " + path.string());
+        }
+    }
+    return meshes;
 }

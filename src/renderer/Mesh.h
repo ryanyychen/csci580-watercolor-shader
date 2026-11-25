@@ -5,6 +5,7 @@
 #include <vector>
 #include <glad/gl.h>
 #include "Object.h"
+#include "SceneImporter.h"
 
 struct PrincipalCurvature
 {
@@ -41,6 +42,7 @@ class Mesh : public Object
     explicit Mesh(const std::filesystem::path &path);
     // Parts must share an exported coordinate system; normalize the assembly once.
     explicit Mesh(const std::vector<std::filesystem::path> &paths);
+    explicit Mesh(const ImportedSceneData &imported, bool centerMesh = false);
     ~Mesh() override;
     Mesh(const Mesh &) = delete;
     Mesh &operator=(const Mesh &) = delete;
