@@ -116,6 +116,9 @@ aspect ratio, using the same pigment colors as the saved images.
 - **R / Reset** restores the initial circle on the same paper.
 - **Playback speed** ranges from 0.1× to 4×; the default is 10 solver steps per second.
 - **S / Save** writes the current paper image to `screenshots/sim/current.ppm`.
+- **Click on the paper** drops clean water there. The panel shows how many cells are wet and
+  damp, so the drop can be timed: on damp paint the water spreads into the paper around it with
+  an irregular edge (a backrun), on dry paint it stays inside the drop and leaves a ring.
 - **Esc** closes the viewer.
 
 A fixed-step accumulator decouples solver updates from rendering. One solver step
@@ -136,7 +139,8 @@ main.cpp                 Select the offline CPU simulation; skip the window.
 WatercolorSim.cpp         Generate paper heights and paint an initial wet circle.
                          Repeat 100 steps:
                            updateVelocities → relaxDivergence → flowOutward
-                           → movePigment
+                           → movePigment → moveWaterOnPaper → transferPigment
+                           → absorbWater → diffuseWater → evaporateWater
 KubelkaMunk.cpp           Convert pigment amounts to French Ultramarine over paper.
 Image_Output.cpp         Save paper.ppm, wet.ppm, and step images in screenshots/sim/.
 ```
@@ -147,9 +151,19 @@ as the stylistic overlay, and its colors come from the Kubelka-Munk module. Wate
 flows and carries pigment within the initial wet region, accumulating pigment near
 its edge. `updateVelocities` handles motion and paper slopes; `relaxDivergence`
 reduces flow imbalance; `flowOutward` lowers pressure near the wet edge; and
-`movePigment` transports suspended pigment. The wet mask does not yet expand into
-dry cells. Settling, granulation, and drying are also unfinished, so later frames
-keep moving pigment toward the edge.
+`movePigment` transports suspended pigment. `transferPigment` lets pigment settle on the
+paper, more of it in the low parts of the paper (granulation), and lifts some of it again.
+
+A stroke also puts an amount of water on the paper, which `moveWaterOnPaper` carries along
+with the flow. `absorbWater` lets the paper soak it up, `diffuseWater` spreads the water
+inside the paper to neighboring cells that are not dry, and `evaporateWater` dries both.
+A cell is wet while water stands on it, damp while only its paper holds water, and dry
+after that. Pigment moves only in wet cells, so the picture settles as the paper dries,
+about 26 seconds after the stroke at normal playback speed.
+
+Curtis et al. (1997) does not keep track of the amount of water on the paper and has no
+drying step, so those parts are our own, and the values of the water parameters were chosen
+by testing. The simulation still uses a single pigment.
 
 Connecting this simulation to the model still requires a surface mapping (such as
 a UV atlas), seam-aware transport and surface distances, expanding water coverage,

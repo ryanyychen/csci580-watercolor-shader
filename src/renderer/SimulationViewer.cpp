@@ -143,7 +143,17 @@ void runSimulationViewer(GLFWwindow *window, bool smokeTest,
         }
         ImGui::Text("Step %d | Playback time %.1f s | %s", steps,
                     steps * SimulationClock::stepSeconds, paused ? "Paused" : "Playing");
-        ImGui::TextWrapped("Pigment flows inside the wet circle. Spreading and drying are not implemented yet.");
+        int wetCells = 0;
+        int dampCells = 0;
+        for (int k = 0; k < sim.width * sim.height; k++)
+        {
+            if (sim.wetMask[k] == 1)
+                wetCells++;
+            else if (sim.waterInPaper[k] > 0.0f)
+                dampCells++;
+        }
+        ImGui::Text("Wet cells %d | Damp cells %d", wetCells, dampCells);
+        ImGui::TextWrapped("Click on the paper to drop clean water.");
         if (save)
         {
             try
@@ -164,6 +174,19 @@ void runSimulationViewer(GLFWwindow *window, bool smokeTest,
         // Simulation pixels start at the bottom, whereas ImGui UVs start at the top.
         ImGui::Image(static_cast<ImTextureID>(texture.id), ImVec2(side, side),
                       ImVec2(0, 1), ImVec2(1, 0));
+        if (ImGui::IsItemClicked())
+        {
+            // A drop of clean water where the paper was clicked, to show backruns on damp paint
+            // and rings on dry paint.
+            const float dropRadius = 16.0f;
+            const float dropWater = 2.0f;
+            const ImVec2 corner = ImGui::GetItemRectMin();
+            const ImVec2 mouse = ImGui::GetMousePos();
+            const float x = (mouse.x - corner.x) / side * sim.width;
+            const float y = (1.0f - (mouse.y - corner.y) / side) * sim.height;
+            sim.paintCircle(x, y, dropRadius, dropWater, 0.0f);
+            dirty = true;
+        }
         ImGui::End();
         glViewport(0, 0, width, height);
         glDisable(GL_DEPTH_TEST);
