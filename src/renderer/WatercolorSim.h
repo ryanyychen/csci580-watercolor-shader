@@ -17,14 +17,16 @@ class WatercolorSim
     void saveDebugImages(const std::string &folder);
     float totalPigment();
 
-    // one time step of the main loop: move the water, then the pigment
+    // one time step of the main loop: move the water and the pigment, then let the paper soak up water and dry
     void step();
     void updateVelocities();
     void relaxDivergence();
     void flowOutward();
     void movePigment();
+    void moveWaterOnPaper();
     void transferPigment();
     void absorbWater();
+    void diffuseWater();
     void evaporateWater();
 
     int width;
@@ -36,13 +38,14 @@ class WatercolorSim
     std::vector<float> pigmentWater; // g, pigment floating in the water
     std::vector<float> pigmentPaper; // d, pigment settled on the paper
 
-    // Water in a cell
-    // A stroke puts water on top of the paper (waterOnPaper), where it flows and carries pigment
-    // Each step the paper soaks up some of it (waterInPaper), and some of the water evaporates
-    // A cell is
-    //   wet  (wetMask 1) while it has waterOnPaper, or more waterInPaper than wetThreshold
-    //   damp (wetMask 0) while it still has some waterInPaper: nothing flows, the pigment stays where it is
+    // water in a cell
+    // a stroke puts water on top of the paper (waterOnPaper), where it flows and carries pigment
+    // each step the paper soaks up some of it (waterInPaper), and some of the water evaporates
+    // a cell is
+    //   wet  (wetMask 1) while it has waterOnPaper
+    //   damp (wetMask 0) when that is gone but it still has waterInPaper: nothing flows, but more water can spread into it
     //   dry  (wetMask 0) when it has no water left
+    // a cell whose paper is nearly full also counts as wet, so that water can flow onto it (see wetThreshold)
     std::vector<float> waterOnPaper; // how much water stands on top of the paper
     std::vector<float> waterInPaper; // s, how much water the paper has soaked up, at most waterCapacity
 
@@ -56,8 +59,12 @@ class WatercolorSim
     float uAt(int i, int j);
     float vAt(int i, int j);
     float maxSpeed();
+    // moves an amount kept per cell, such as pigmentWater, along with the water flow
+    void carryWithFlow(std::vector<float> &amount);
     // c, the most water the paper of cell k can soak up
     float waterCapacity(int k) const;
+    // whether waterInPaper of cell k is above the share wetThreshold of its waterCapacity
+    bool paperIsNearlyFull(int k) const;
     void enforceBoundaries();
     std::vector<float> blurWetMask();
 };
