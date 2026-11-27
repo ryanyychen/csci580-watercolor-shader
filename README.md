@@ -177,8 +177,13 @@ real pigments more closely, for example ultramarine versus phthalo blue mixed wi
 
 ```cpp
 MeasuredPigment blue = measuredPigmentFromName("Ultramarine Blue");
-glm::vec3 color = colorFromMeasuredLayers({{blue, 0.5f}}, paperColor);
+MeasuredPigment copper = measuredPigmentFromRGB(glm::vec3(0.45f, 0.16f, 0.06f));
+glm::vec3 color = colorFromMeasuredLayers({{blue, 0.5f}, {copper, 0.3f}}, paperColor);
 ```
+
+Like `pigmentFromRGB`, `measuredPigmentFromRGB` gives a pigment whose layer at thickness 1
+over white paper has the given color. It finds the measured pigment, or mix of two, that
+comes closest. Colors that real paint cannot reach, such as pure red, get the closest mix.
 
 The measured data comes from the
 [painting_tools](https://github.com/rubenwiersma/painting_tools) repository and is shared
@@ -243,7 +248,9 @@ use values from 0 to 1. Edit `world.lights` and `world.ambient_intensity` to cha
 illumination.
 
 For watercolor colors, edit the `pigment` and `pigmentPaperColor` setup in
-`src/main.cpp` (default: measured Ultramarine Blue over warm paper). A fixed mix
+`src/main.cpp`. By default, each object gets measured pigments mixed to match its
+`color_diffuse`, over warm paper; the RGB version is kept there as a commented
+alternative. A fixed mix
 can use `measuredLayerFromMix({{blue, 0.7f}, {yellow, 0.3f}}).pigment` instead of a
 single pigment. The C++ spectral module generates 1,024 samples, including bare
 paper at thickness zero and paint at `pigmentLookupMaxThickness` (default 3).

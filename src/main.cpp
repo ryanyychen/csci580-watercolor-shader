@@ -408,23 +408,20 @@ void run(GLFWwindow *window, const std::filesystem::path &resources,
         mesh->material_shader = phongShader;
         mesh->direction_shader = directionShader;
 
-        // Bake a fixed measured pigment over fixed paper on the CPU. To use a fixed
-        // mixture, replace pigment with measuredLayerFromMix(...).pigment here.
+        // Bake the object's pigment over fixed paper on the CPU.
         // Changing either pigment or paper requires rebuilding this table.
-        /*
-        const MeasuredPigment pigment = measuredPigmentFromName("Ultramarine Blue");
         const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
+
+        // Measured version: the pigment is mixed from measured pigments to match the object's diffuse color
+        const MeasuredPigment pigment = measuredPigmentFromRGB(mesh->material.color_diffuse);
         const auto pigmentColors = createMeasuredPigmentLookup(
             pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
-        mesh->material.pigmentLookup =
-            new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
-        */
 
-        // Choose pigment based on object diffuse color instead of hardcoding to blue
-        const Pigment pigment = pigmentFromRGB(mesh->material.color_diffuse);
-        const glm::vec3 pigmentPaperColor(0.96f, 0.94f, 0.88f);
-        const auto pigmentColors = createPigmentLookup(
-            pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
+        // RGB version: to use it, comment out the measured version above and uncomment these lines
+        // const Pigment pigment = pigmentFromRGB(mesh->material.color_diffuse);
+        // const auto pigmentColors = createPigmentLookup(
+        //     pigment, pigmentPaperColor, 1024, mesh->material.pigmentLookupMaxThickness);
+
         mesh->material.pigmentLookup = new Texture(static_cast<int>(pigmentColors.size()), 1, pigmentColors);
 
         meshes.push_back(mesh.get());
