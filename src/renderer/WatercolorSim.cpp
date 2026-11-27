@@ -161,6 +161,7 @@ void WatercolorSim::step()
     relaxDivergence();
     flowOutward();
     movePigment();
+    transferPigment();
 }
 
 void WatercolorSim::updateVelocities()
@@ -381,6 +382,33 @@ void WatercolorSim::movePigment()
             }
         }
         pigmentWater = newG;
+    }
+}
+
+void WatercolorSim::transferPigment()
+{
+    // pigment settles from the water onto the paper, and is lifted back into the water
+    // values for French Ultramarine from Curtis et al. (1997)
+    const float density = 0.01f;     // rho, how fast pigment settles and is lifted
+    const float staining = 3.1f;     // omega, how much settled pigment resists being lifted
+    const float granulation = 0.91f; // gamma, how much more pigment settles in the low parts of the paper
+
+    for (int k = 0; k < width * height; k++)
+    {
+        if (wetMask[k] == 0)
+            continue;
+
+        float h = paperHeight[k];
+        float down = pigmentWater[k] * (1.0f - h * granulation) * density;
+        float up = pigmentPaper[k] * (1.0f + (h - 1.0f) * granulation) * density / staining;
+        // neither layer can hold more than 1
+        if (pigmentPaper[k] + down > 1.0f)
+            down = std::max(0.0f, 1.0f - pigmentPaper[k]);
+        if (pigmentWater[k] + up > 1.0f)
+            up = std::max(0.0f, 1.0f - pigmentWater[k]);
+
+        pigmentPaper[k] += down - up;
+        pigmentWater[k] += up - down;
     }
 }
 

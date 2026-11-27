@@ -23,6 +23,7 @@ class WatercolorSim
     void relaxDivergence();
     void flowOutward();
     void movePigment();
+    void transferPigment();
 
     int width;
     int height;
