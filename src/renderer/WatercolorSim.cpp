@@ -9,10 +9,14 @@
 #include <iostream>
 #include <glm/glm.hpp>
 
-// how much water a cell of paper can hold: c = h * (maxCapacity - minCapacity) + minCapacity (Curtis et al. 1997)
-// the two values were chosen by testing; a lower minCapacity makes the first cells dry sooner
-const float minCapacity = 0.2f;
-const float maxCapacity = 1.0f;
+// waterCapacity goes from minWaterCapacity where the paper is lowest to maxWaterCapacity where it is highest
+// the two limits are from Curtis et al. (1997), which gives no values for them
+const float minWaterCapacity = 0.2f; // chosen by testing
+const float maxWaterCapacity = 1.0f; // chosen by testing
+
+// a cell that has no waterOnPaper is still wet while its waterInPaper is above wetThreshold
+// the threshold is from Curtis et al. (1997), which gives no value for it
+const float wetThreshold = 0.3f; // chosen by testing
 
 WatercolorSim::WatercolorSim(int w, int h)
 {
@@ -25,7 +29,8 @@ WatercolorSim::WatercolorSim(int w, int h)
     pressure.assign(size, 0.0f);
     pigmentWater.assign(size, 0.0f);
     pigmentPaper.assign(size, 0.0f);
-    paperWater.assign(size, 0.0f);
+    waterOnPaper.assign(size, 0.0f);
+    waterInPaper.assign(size, 0.0f);
     u.assign((width + 1) * height, 0.0f);
     v.assign(width * (height + 1), 0.0f);
 }
@@ -61,8 +66,9 @@ void WatercolorSim::paintCircle(float centerX, float centerY, float radius, floa
             wetMask[k] = 1;
             pressure[k] += water;
             pigmentWater[k] = std::min(1.0f, pigmentWater[k] + pigment);
-            // the paper under the brush is soaked full
-            paperWater[k] = paperCapacity(k);
+            // pressure makes the water flow, waterOnPaper is how much of it there is
+            // the flow does not move waterOnPaper from cell to cell
+            waterOnPaper[k] += water;
         }
     }
 }
@@ -76,8 +82,10 @@ std::vector<Pixel> WatercolorSim::imagePixels() const
     for (int k = 0; k < width * height; k++)
     {
         glm::vec3 paper = paperColor * (0.88f + 0.12f * paperHeight[k]);
-        if (wetMask[k] == 1)
-            paper *= 0.95f;
+        // paper that holds water is darker, by 5% while water stands on it,
+        // and by less and less as the water in it evaporates
+        float wetness = waterOnPaper[k] > 0.0f ? 1.0f : waterInPaper[k] / waterCapacity(k);
+        paper *= 1.0f - 0.1f * wetness;
         // one layer of pigment over the paper, thickness = floating + settled pigment
         float thickness = pigmentWater[k] + pigmentPaper[k];
         glm::vec3 color = colorFromLayers({{pigment, thickness}}, paper);
@@ -130,9 +138,9 @@ float WatercolorSim::vAt(int i, int j)
     return v[j * width + i];
 }
 
-float WatercolorSim::paperCapacity(int k) const
+float WatercolorSim::waterCapacity(int k) const
 {
-    return paperHeight[k] * (maxCapacity - minCapacity) + minCapacity;
+    return paperHeight[k] * (maxWaterCapacity - minWaterCapacity) + minWaterCapacity;
 }
 
 float WatercolorSim::maxSpeed()
@@ -175,7 +183,8 @@ void WatercolorSim::step()
     flowOutward();
     movePigment();
     transferPigment();
-    dryPaper();
+    absorbWater();
+    evaporateWater();
 }
 
 void WatercolorSim::updateVelocities()
@@ -426,24 +435,46 @@ void WatercolorSim::transferPigment()
     }
 }
 
-void WatercolorSim::dryPaper()
+void WatercolorSim::absorbWater()
 {
-    // Curtis et al. (1997) has no drying step
-    // paperWater in every wet cell goes down by the same amount each step, and a cell whose paperWater reaches 0 is dry
-    // every cell is dry after stepsToDry steps; a smaller value dries faster
-    const int stepsToDry = 150; // chosen by testing
-    const float evaporation = maxCapacity / stepsToDry;
+    // the paper of every wet cell soaks up waterOnPaper, until waterInPaper reaches waterCapacity
+    // this is the first part of SimulateCapillaryFlow in Curtis et al. (1997)
+    // unlike there, what is soaked up is taken away from waterOnPaper, so it can run out
+    // the most a cell soaks up in one step, from Curtis et al. (1997), which gives no value for it
+    const float absorption = 0.1f; // chosen by testing
 
     for (int k = 0; k < width * height; k++)
     {
         if (wetMask[k] == 0)
             continue;
 
-        paperWater[k] = std::max(0.0f, paperWater[k] - evaporation);
-        if (paperWater[k] > 0.0f)
+        float roomInPaper = waterCapacity(k) - waterInPaper[k];
+        float amount = std::max(0.0f, std::min({absorption, roomInPaper, waterOnPaper[k]}));
+        waterOnPaper[k] -= amount;
+        waterInPaper[k] += amount;
+    }
+}
+
+void WatercolorSim::evaporateWater()
+{
+    // Curtis et al. (1997) has no drying step
+    // each step a cell loses some waterOnPaper, or, once that is gone, some waterInPaper, which evaporates more slowly
+    // one unit of water takes this many steps to evaporate; smaller values dry faster
+    const int stepsToEvaporateOnPaper = 100; // chosen by testing
+    const int stepsToEvaporateInPaper = 400; // chosen by testing
+
+    for (int k = 0; k < width * height; k++)
+    {
+        if (waterOnPaper[k] > 0.0f)
+            waterOnPaper[k] = std::max(0.0f, waterOnPaper[k] - 1.0f / stepsToEvaporateOnPaper);
+        else
+            waterInPaper[k] = std::max(0.0f, waterInPaper[k] - 1.0f / stepsToEvaporateInPaper);
+
+        bool stillWet = waterOnPaper[k] > 0.0f || waterInPaper[k] > wetThreshold;
+        if (wetMask[k] == 0 || stillWet)
             continue;
 
-        // the cell is dry: it leaves the wet area, so enforceBoundaries() stops water flowing into it,
+        // the cell turns from wet to damp: it leaves the wet area, so enforceBoundaries() stops water flowing into it,
         // and the pigment still floating settles on the paper
         wetMask[k] = 0;
         pressure[k] = 0.0f;
