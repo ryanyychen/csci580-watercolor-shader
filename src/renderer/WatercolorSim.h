@@ -1,4 +1,5 @@
 #pragma once
+#include "Camera.h"
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@ class WatercolorSim
     void makePaper();
     void paintCircle(float centerX, float centerY, float radius, float water, float pigment);
     void saveImage(const std::string &filename);
+    std::vector<Pixel> imagePixels() const;
     void saveDebugImages(const std::string &folder);
     float totalPigment();
 

@@ -276,6 +276,7 @@ check_sources = [
     "src/renderer/PigmentLookup.cpp",
     "src/renderer/KubelkaMunk.cpp",
     "src/renderer/KubelkaMunkMeasured.cpp",
+    "src/renderer/WatercolorSim.cpp",
 ]
 checks = env.Program(str(build / "renderer_checks"), objects(check_sources, "checks") + support)
 env.Depends(checks, assimp_library_node)

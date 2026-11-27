@@ -3,6 +3,8 @@
 #include "renderer/TextureGenerator.h"
 #include "renderer/PigmentLookup.h"
 #include "renderer/SceneImporter.h"
+#include "renderer/SimulationClock.h"
+#include "renderer/WatercolorSim.h"
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <chrono>
@@ -128,11 +130,46 @@ void checkFbxMaterialImport()
             "The first FBX material was not selected");
 }
 
+void checkSimulationPlayback()
+{
+    for (int fps : {30, 60, 144})
+    {
+        SimulationClock clock;
+        int steps = 0;
+        for (int frame = 0; frame < fps * 10; ++frame)
+            steps += clock.advance(1.0 / fps, 1.0, false);
+        require(steps == 100, "Simulation playback depends on rendering FPS");
+    }
+    SimulationClock clock;
+    require(clock.advance(0.05, 1.0, false) == 0, "Clock stepped too soon");
+    require(clock.advance(1.0, 1.0, true) == 0, "Paused clock advanced");
+    require(clock.advance(0.05, 1.0, false) == 0, "Pause retained old time debt");
+    clock.reset();
+    require(clock.advance(0.05, 2.0, false) == 1, "Speed did not scale playback");
+    require(clock.advance(60.0, 4.0, false) == SimulationClock::maxStepsPerFrame,
+            "Long stall exceeded frame work limit");
+    require(clock.advance(0.0, 1.0, false) == 0, "Clock retained catch-up debt");
+
+    WatercolorSim sim(32, 32);
+    sim.paintCircle(16, 16, 8, 1, 0.5f);
+    const auto initial = sim.imagePixels();
+    const float mass = sim.totalPigment();
+    for (int step = 0; step < 100; ++step)
+        sim.step();
+    require(sim.imagePixels() != initial, "Simulation image never changed");
+    require(std::fabs(sim.totalPigment() - mass) < 0.001f * mass,
+            "Simulation lost pigment during playback");
+    for (float value : sim.pigmentWater)
+        require(std::isfinite(value) && value >= -1e-6f,
+                "Simulation produced invalid pigment during playback");
+}
+
 int main()
 {
     try
     {
         checkSceneMaterialImport();
+        checkSimulationPlayback();
         checkFbxMaterialImport();
         Camera camera;
         camera.Position_And_Aim_Camera(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0));
@@ -324,7 +361,7 @@ int main()
         }
         require(invalidLookupRejected, "Pigment lookup accepted fewer than two samples");
 
-        std::cout << "Scene import, camera, PPM, LIC, and spectral pigment lookup checks passed\n";
+        std::cout << "Scene import, camera, PPM, LIC, simulation playback, and spectral pigment lookup checks passed\n";
         return 0;
     }
     catch (const std::exception &error)

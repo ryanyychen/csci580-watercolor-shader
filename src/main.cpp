@@ -8,6 +8,7 @@
 #include "renderer/SceneImporter.h"
 #include "renderer/TextureGenerator.h"
 #include "renderer/WatercolorSim.h"
+#include "renderer/SimulationViewer.h"
 #include "renderer/UI.h"
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -589,16 +590,18 @@ int main(int argc, char **argv)
         std::filesystem::path outputPath;
         bool smokeTest = false;
         bool runSim = false;
+        bool offlineSim = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string arg = argv[i];
             if (arg == "--help")
             {
                 std::cout
-                    << "Usage: watercolor [part.obj ...] [--resources directory] [--output image.ppm] [--smoke-test] [--sim]\n"
+                    << "Usage: watercolor [part.obj ...] [--resources directory] [--output image.ppm] [--smoke-test] [--sim | --sim-offline]\n"
                        "Left drag: orbit | Wheel: zoom | R: reset | N: normals | S: save output.ppm | Esc: quit\n"
                        "--output renders one frame to P3 PPM and exits; combined with --smoke-test renders three frames.\n"
-                       "--sim runs the watercolor simulation and saves images to screenshots/sim/.\n";
+                       "--sim opens the live 2D simulation: Space: pause | Right: step | R: reset | S: save.\n"
+                       "--sim-offline runs 100 steps without a window and saves images to screenshots/sim/.\n";
                 return 0;
             }
             if (arg == "--resources" && i + 1 < argc)
@@ -609,6 +612,8 @@ int main(int argc, char **argv)
                 smokeTest = true;
             else if (arg == "--sim")
                 runSim = true;
+            else if (arg == "--sim-offline")
+                offlineSim = true;
             else if (arg.rfind("--", 0) == 0)
                 throw std::runtime_error("Unknown or incomplete option: " + arg);
             else
@@ -616,8 +621,10 @@ int main(int argc, char **argv)
         }
         if (!outputPath.empty() && outputPath.extension() != ".ppm")
             throw std::runtime_error("--output requires a .ppm filename (P3 format)");
-        // simulation runs on the CPU and no window.
-        if (runSim)
+        if (runSim && offlineSim)
+            throw std::runtime_error("Choose either --sim or --sim-offline");
+        // Preserve the batch simulation for windowless image-sequence exports.
+        if (offlineSim)
         {
             runWatercolorSimDemo();
             return 0;
@@ -656,7 +663,10 @@ int main(int argc, char **argv)
         std::cout << "OpenGL Renderer: " << glGetString(GL_RENDERER) << '\n';
         std::cout << "Shading Language Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION)
                   << '\n';
-        run(window, resources, meshPaths, smokeTest, outputPath);
+        if (runSim)
+            runSimulationViewer(window, smokeTest, outputPath);
+        else
+            run(window, resources, meshPaths, smokeTest, outputPath);
         glfwDestroyWindow(window);
         glfwTerminate();
         return 0;

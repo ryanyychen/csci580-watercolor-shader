@@ -108,10 +108,31 @@ All meshes share one generated Perlin noise texture, while LIC textures are
 generated separately for each mesh from that shared noise. With no path, the
 viewer loads `assets/models/octahedron.obj`.
 
-Running `./watercolor --sim` runs the physical simulation instead of the viewer:
+Running `./watercolor --sim` opens the physical simulation in a live GLFW/OpenGL
+window with playback controls. The 256 × 256 paper grid is displayed at its correct
+aspect ratio, using the same pigment colors as the saved images.
+
+- **Space / Play / Pause** toggles playback; **Right arrow / Step** pauses and advances one step.
+- **R / Reset** restores the initial circle on the same paper.
+- **Playback speed** ranges from 0.1× to 4×; the default is 10 solver steps per second.
+- **S / Save** writes the current paper image to `screenshots/sim/current.ppm`.
+- **Esc** closes the viewer.
+
+A fixed-step accumulator decouples solver updates from rendering. One solver step
+retains the existing simulation time unit; the displayed playback time maps ten
+steps to one second at 1×, so 100 steps take about ten seconds. These are playback
+seconds, not calibrated physical seconds. Long stalls are discarded and updates
+are capped at four steps per frame to keep controls responsive under load; on a
+slow machine playback slows down rather than accumulating a backlog.
+
+`./watercolor --sim --smoke-test` exercises three hidden frames, including solver
+updates and texture uploads. `--sim --output image.ppm` exports the initial paper
+image and exits. `./watercolor --sim-offline` preserves the original windowless
+100-step image sequence:
+
 
 ```text
-main.cpp                 Select the CPU simulation; skip the window.
+main.cpp                 Select the offline CPU simulation; skip the window.
 WatercolorSim.cpp         Generate paper heights and paint an initial wet circle.
                          Repeat 100 steps:
                            updateVelocities → relaxDivergence → flowOutward
@@ -277,8 +298,11 @@ scons -j4
 # Render one image and exit
 ./watercolor "path/to/model.obj" --output screenshots/render.ppm
 
-# Run the physical simulation and save images to screenshots/sim/ (no window)
+# Open the live physical simulation viewer
 ./watercolor --sim
+
+# Save the original simulation image sequence (no window)
+./watercolor --sim-offline
 ```
 
 The executable is at the repository root; intermediate files stay in

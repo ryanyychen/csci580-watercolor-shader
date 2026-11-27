@@ -59,7 +59,7 @@ void WatercolorSim::paintCircle(float centerX, float centerY, float radius, floa
     }
 }
 
-void WatercolorSim::saveImage(const std::string &filename)
+std::vector<Pixel> WatercolorSim::imagePixels() const
 {
     std::vector<Pixel> pixels(width * height);
     glm::vec3 paperColor(0.96f, 0.94f, 0.88f);
@@ -76,6 +76,12 @@ void WatercolorSim::saveImage(const std::string &filename)
         pixels[k] = Pixel_Color(color);
     }
 
+    return pixels;
+}
+
+void WatercolorSim::saveImage(const std::string &filename)
+{
+    const auto pixels = imagePixels();
     Dump_ppm(pixels.data(), width, height, filename);
 }
 

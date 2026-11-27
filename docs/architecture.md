@@ -48,9 +48,14 @@ lighting, dimensions, and background. Define whether depth is hardware depth or
 linear view-space distance before consuming it.
 
 The stylistic pipeline will operate on the scene shading and/or render targets.
-The physical pipeline is proposed as an offline 2D paper-grid solver consuming
-color and mask and returning pigment for compositing. These are integration
-plans, not current APIs. Instructor approval of that physical scope is pending.
+The physical pipeline currently has a separate CPU 2D paper-grid solver,
+`WatercolorSim`. `--sim` opens `SimulationViewer`, which uses the existing GLFW
+context and ImGui backend to display a texture built from `imagePixels()`.
+The export path consumes the same pixels. `SimulationClock` schedules fixed solver
+steps at 10 Hz by default, with adjustable playback speed and bounded catch-up;
+solver steps retain their original unit rather than using variable render deltas.
+`--sim-offline` retains the windowless 100-step demo. Consuming scene color/mask
+and returning pigment for model compositing remain integration plans.
 
 Suggested four-person split after the baseline: two people on shared rendering
 and stylistic effects, two on simulation and compositing. Agree on buffer
