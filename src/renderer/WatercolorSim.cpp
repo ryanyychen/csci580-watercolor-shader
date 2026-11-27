@@ -9,6 +9,16 @@
 #include <iostream>
 #include <glm/glm.hpp>
 
+// waterCapacity goes from minWaterCapacity where the paper is lowest to maxWaterCapacity where it is highest
+// the two limits are from Curtis et al. (1997), which gives no values for them
+const float minWaterCapacity = 0.2f; // chosen by testing
+const float maxWaterCapacity = 1.0f; // chosen by testing
+
+// the paper of a cell is nearly full while its waterInPaper is above this share of its waterCapacity
+// a cell with nearly full paper counts as wet even without waterOnPaper, and passes water on to its neighbors
+// the threshold is from Curtis et al. (1997), which gives no value for it
+const float wetThreshold = 0.8f; // chosen by testing
+
 WatercolorSim::WatercolorSim(int w, int h)
 {
     width = w;
@@ -20,6 +30,8 @@ WatercolorSim::WatercolorSim(int w, int h)
     pressure.assign(size, 0.0f);
     pigmentWater.assign(size, 0.0f);
     pigmentPaper.assign(size, 0.0f);
+    waterOnPaper.assign(size, 0.0f);
+    waterInPaper.assign(size, 0.0f);
     u.assign((width + 1) * height, 0.0f);
     v.assign(width * (height + 1), 0.0f);
 }
@@ -55,6 +67,8 @@ void WatercolorSim::paintCircle(float centerX, float centerY, float radius, floa
             wetMask[k] = 1;
             pressure[k] += water;
             pigmentWater[k] = std::min(1.0f, pigmentWater[k] + pigment);
+            // pressure makes the water flow, waterOnPaper is how much of it there is
+            waterOnPaper[k] += water;
         }
     }
 }
@@ -68,8 +82,9 @@ std::vector<Pixel> WatercolorSim::imagePixels() const
     for (int k = 0; k < width * height; k++)
     {
         glm::vec3 paper = paperColor * (0.88f + 0.12f * paperHeight[k]);
-        if (wetMask[k] == 1)
-            paper *= 0.95f;
+        // paper that holds water is darker: by 10% while water stands on it, and by less as the water in it evaporates
+        float wetness = waterOnPaper[k] > 0.0f ? 1.0f : waterInPaper[k] / waterCapacity(k);
+        paper *= 1.0f - 0.1f * wetness;
         // one layer of pigment over the paper, thickness = floating + settled pigment
         float thickness = pigmentWater[k] + pigmentPaper[k];
         glm::vec3 color = colorFromLayers({{pigment, thickness}}, paper);
@@ -122,6 +137,16 @@ float WatercolorSim::vAt(int i, int j)
     return v[j * width + i];
 }
 
+float WatercolorSim::waterCapacity(int k) const
+{
+    return paperHeight[k] * (maxWaterCapacity - minWaterCapacity) + minWaterCapacity;
+}
+
+bool WatercolorSim::paperIsNearlyFull(int k) const
+{
+    return waterInPaper[k] > wetThreshold * waterCapacity(k);
+}
+
 float WatercolorSim::maxSpeed()
 {
     float fastest = 0.0f;
@@ -161,6 +186,11 @@ void WatercolorSim::step()
     relaxDivergence();
     flowOutward();
     movePigment();
+    moveWaterOnPaper();
+    transferPigment();
+    absorbWater();
+    diffuseWater();
+    evaporateWater();
 }
 
 void WatercolorSim::updateVelocities()
@@ -346,14 +376,14 @@ void WatercolorSim::flowOutward()
         pressure[k] -= eta * (1.0f - blurred[k]) * wetMask[k];
 }
 
-void WatercolorSim::movePigment()
+void WatercolorSim::carryWithFlow(std::vector<float> &amount)
 {
     int substeps = std::max(1, static_cast<int>(std::ceil(maxSpeed())));
     float dt = 1.0f / substeps;
 
     for (int s = 0; s < substeps; s++)
     {
-        std::vector<float> newG = pigmentWater;
+        std::vector<float> moved = amount;
         for (int j = 0; j < height; j++)
         {
             for (int i = 0; i < width; i++)
@@ -362,25 +392,166 @@ void WatercolorSim::movePigment()
                 if (wetMask[k] == 0)
                     continue;
 
-                // send pigment to each neighbor that water is flowing toward
-                float g = pigmentWater[k];
-                float toRight = dt * std::max(0.0f, uAt(i + 1, j)) * g;
-                float toLeft = dt * std::max(0.0f, -uAt(i, j)) * g;
-                float toTop = dt * std::max(0.0f, vAt(i, j + 1)) * g;
-                float toBottom = dt * std::max(0.0f, -vAt(i, j)) * g;
+                // send a share of the amount to each neighbor that water is flowing toward
+                float here = amount[k];
+                float toRight = dt * std::max(0.0f, uAt(i + 1, j)) * here;
+                float toLeft = dt * std::max(0.0f, -uAt(i, j)) * here;
+                float toTop = dt * std::max(0.0f, vAt(i, j + 1)) * here;
+                float toBottom = dt * std::max(0.0f, -vAt(i, j)) * here;
 
-                newG[k] -= toRight + toLeft + toTop + toBottom;
+                moved[k] -= toRight + toLeft + toTop + toBottom;
                 if (i + 1 < width)
-                    newG[k + 1] += toRight;
+                    moved[k + 1] += toRight;
                 if (i > 0)
-                    newG[k - 1] += toLeft;
+                    moved[k - 1] += toLeft;
                 if (j + 1 < height)
-                    newG[k + width] += toTop;
+                    moved[k + width] += toTop;
                 if (j > 0)
-                    newG[k - width] += toBottom;
+                    moved[k - width] += toBottom;
             }
         }
-        pigmentWater = newG;
+        amount = moved;
+    }
+}
+
+void WatercolorSim::movePigment()
+{
+    carryWithFlow(pigmentWater);
+}
+
+void WatercolorSim::moveWaterOnPaper()
+{
+    // not in Curtis et al. (1997), which keeps track of the pressure and speed of the water but not of its amount
+    carryWithFlow(waterOnPaper);
+}
+
+void WatercolorSim::transferPigment()
+{
+    // pigment settles from the water onto the paper, and is lifted back into the water
+    // the three values are those of French Ultramarine in Curtis et al. (1997)
+    const float density = 0.01f;     // how fast pigment settles and is lifted
+    const float staining = 3.1f;     // how much settled pigment resists being lifted
+    const float granulation = 0.91f; // how much more pigment settles in the low parts of the paper
+
+    for (int k = 0; k < width * height; k++)
+    {
+        if (wetMask[k] == 0)
+            continue;
+
+        float h = paperHeight[k];
+        float down = pigmentWater[k] * (1.0f - h * granulation) * density;
+        float up = pigmentPaper[k] * (1.0f + (h - 1.0f) * granulation) * density / staining;
+        // neither layer can hold more than 1
+        if (pigmentPaper[k] + down > 1.0f)
+            down = std::max(0.0f, 1.0f - pigmentPaper[k]);
+        if (pigmentWater[k] + up > 1.0f)
+            up = std::max(0.0f, 1.0f - pigmentWater[k]);
+
+        pigmentPaper[k] += down - up;
+        pigmentWater[k] += up - down;
+    }
+}
+
+void WatercolorSim::absorbWater()
+{
+    // the paper of every wet cell soaks up waterOnPaper until its waterInPaper reaches waterCapacity
+    // from Curtis et al. (1997), except that the water soaked up is taken out of waterOnPaper
+    // absorption is the most a cell soaks up in one step, Curtis et al. (1997) gives no value for it
+    const float absorption = 0.1f; // chosen by testing
+
+    for (int k = 0; k < width * height; k++)
+    {
+        if (wetMask[k] == 0)
+            continue;
+
+        float roomInPaper = waterCapacity(k) - waterInPaper[k];
+        float amount = std::max(0.0f, std::min({absorption, roomInPaper, waterOnPaper[k]}));
+        waterOnPaper[k] -= amount;
+        waterInPaper[k] += amount;
+    }
+}
+
+void WatercolorSim::diffuseWater()
+{
+    // waterInPaper spreads from a cell to those of its four neighbors that hold less of it
+    // a cell gives water only while its paper is nearly full, and receives it only while its waterInPaper is above
+    // minToReceive, so water does not spread into dry paper
+    // from Curtis et al. (1997), which gives no value for minToReceive
+    const float minToReceive = 0.1f; // chosen by testing
+
+    const int neighborX[4] = {1, -1, 0, 0};
+    const int neighborY[4] = {0, 0, 1, -1};
+    std::vector<float> spread = waterInPaper;
+    for (int j = 0; j < height; j++)
+    {
+        for (int i = 0; i < width; i++)
+        {
+            int k = j * width + i;
+            if (!paperIsNearlyFull(k))
+                continue;
+
+            for (int d = 0; d < 4; d++)
+            {
+                int ni = i + neighborX[d];
+                int nj = j + neighborY[d];
+                if (ni < 0 || ni >= width || nj < 0 || nj >= height)
+                    continue;
+
+                int n = nj * width + ni;
+                if (waterInPaper[n] >= waterInPaper[k] || waterInPaper[n] <= minToReceive)
+                    continue;
+
+                // a quarter of the difference, but no more than the neighbor has room for
+                float roomInNeighbor = waterCapacity(n) - waterInPaper[n];
+                float amount = std::max(0.0f, std::min(waterInPaper[k] - waterInPaper[n], roomInNeighbor) / 4.0f);
+                spread[k] -= amount;
+                spread[n] += amount;
+            }
+        }
+    }
+    waterInPaper = spread;
+
+    // a damp cell whose paper is now nearly full is wet again, so the wet area grows
+    for (int k = 0; k < width * height; k++)
+    {
+        if (paperIsNearlyFull(k))
+            wetMask[k] = 1;
+    }
+}
+
+void WatercolorSim::evaporateWater()
+{
+    // Curtis et al. (1997) has no drying step
+    // each step a cell loses some waterOnPaper, or, once that is gone, some waterInPaper
+    // one unit of water takes this many steps to evaporate, and smaller values dry faster
+    const int stepsToEvaporateOnPaper = 200; // chosen by testing
+    const int stepsToEvaporateInPaper = 300; // chosen by testing
+    // waterOnPaper deeper than filmDepth evaporates faster, in proportion to its depth,
+    // as if it had spread out into a film of that depth over a larger area
+    const float filmDepth = 0.2f; // chosen by testing
+
+    for (int k = 0; k < width * height; k++)
+    {
+        if (waterOnPaper[k] > 0.0f)
+        {
+            float area = std::max(1.0f, waterOnPaper[k] / filmDepth);
+            waterOnPaper[k] = std::max(0.0f, waterOnPaper[k] - area / stepsToEvaporateOnPaper);
+        }
+        else
+        {
+            waterInPaper[k] = std::max(0.0f, waterInPaper[k] - 1.0f / stepsToEvaporateInPaper);
+        }
+
+        bool stillWet = waterOnPaper[k] > 0.0f || paperIsNearlyFull(k);
+        if (wetMask[k] == 0 || stillWet)
+            continue;
+
+        // the cell turns from wet to damp: it leaves the wet area, so enforceBoundaries() stops water flowing into it,
+        // and the pigment still floating settles on the paper
+        wetMask[k] = 0;
+        pressure[k] = 0.0f;
+        pigmentPaper[k] += pigmentWater[k];
+        pigmentWater[k] = 0.0f;
     }
 }
 
