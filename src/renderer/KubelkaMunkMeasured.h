@@ -33,6 +33,14 @@ const std::vector<NamedMeasuredPigment> &measuredPalette();
 // Throws std::invalid_argument if there is none
 MeasuredPigment measuredPigmentFromName(const std::string &name);
 
+// Same as pigmentFromRGB in KubelkaMunk.h, but mixed from the measured pigments
+// Picks one measured pigment, or two mixed in steps of 5%, and how much of it to use,
+// so that one layer at thickness 1 over white paper is closest to color
+// Closest means the smallest difference in CIELAB, which follows how different two colors look
+// Colors that no mix can reach, such as pure red (1, 0, 0), get the closest mix
+// The search over pigments and their mixes follows Pigmento (Tan et al. 2018)
+MeasuredPigment measuredPigmentFromRGB(const glm::vec3 &color);
+
 // Same as layerFromMix in KubelkaMunk.h, computed per wavelength band
 // Throws std::invalid_argument if parts is empty
 MeasuredLayer measuredLayerFromMix(const std::vector<MeasuredLayer> &parts);

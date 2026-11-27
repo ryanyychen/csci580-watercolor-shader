@@ -1,4 +1,5 @@
 #include "KubelkaMunkMeasured.h"
+#include <cmath>
 #include <stdexcept>
 
 namespace
@@ -35,6 +36,96 @@ float paperWeight(int control, float wavelength)
 // Converts thickness in the units of KubelkaMunk.h to the units of the measured K and S
 // With this scale, the median thickness at which a pigment over white paper reaches half of its full color
 const float thicknessScale = 1.6f;
+
+// Converts a linear RGB color to CIELAB (CIE 1976 L*a*b*), clamped to what the screen can show
+// In CIELAB, the distance between two colors follows how different they look, unlike in RGB
+glm::vec3 cielabFromRGB(const glm::vec3 &color)
+{
+    glm::vec3 c = glm::clamp(color, 0.0f, 1.0f);
+
+    // Linear sRGB to CIE XYZ, with the matrix from the sRGB standard (IEC 61966-2-1 1999)
+    glm::vec3 xyz(0.4124f * c.r + 0.3576f * c.g + 0.1805f * c.b,
+                  0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b,
+                  0.0193f * c.r + 0.1192f * c.g + 0.9505f * c.b);
+
+    // XYZ to CIELAB, with the formulas from CIE 15 (2004)
+    xyz /= glm::vec3(0.95047f, 1.0f, 1.08883f);
+    for (int i = 0; i < 3; i++)
+        xyz[i] = xyz[i] > 0.008856f ? std::cbrt(xyz[i]) : 7.787f * xyz[i] + 16.0f / 116.0f;
+    return glm::vec3(116.0f * xyz.y - 16.0f, 500.0f * (xyz.x - xyz.y), 200.0f * (xyz.y - xyz.z));
+}
+
+// Two measured pigments mixed in one layer, given by how thick a layer of each goes into the mix
+// Mixing a pigment with itself gives that pigment alone
+struct TwoPigmentMix
+{
+    int firstPigment; // index in measuredPalette()
+    float firstThickness;
+    int secondPigment; // index in measuredPalette()
+    float secondThickness;
+};
+
+MeasuredLayer layerFromTwoPigmentMix(const TwoPigmentMix &mix)
+{
+    const std::vector<NamedMeasuredPigment> &palette = measuredPalette();
+    return measuredLayerFromMix({{palette[mix.firstPigment].pigment, mix.firstThickness},
+                                 {palette[mix.secondPigment].pigment, mix.secondThickness}});
+}
+
+// A mix together with its color over white paper in CIELAB
+struct MixColor
+{
+    TwoPigmentMix mix;
+    glm::vec3 cielab;
+};
+
+// Computes the color of every pair of measured pigments, mixed at many shares and total thicknesses
+// Listing the colors of pigments and their mixes to search in follows Pigmento (Tan et al. 2018),
+// which lists single pigments and 50/50 mixes
+std::vector<MixColor> computeMixColors()
+{
+    // The share of the first pigment is 1/20, 2/20, ..., 19/20, that is 5% to 95% in steps of 5%
+    const int shareSteps = 20;
+    // The total thickness goes from 1/10 to 10, evenly on a log scale around thickness 1:
+    // 10^(k / 20) for k = -20 to 20, that is 20 steps for every factor of 10
+    const int stepsPerFactorOfTen = 20;
+
+    const int pigmentCount = static_cast<int>(measuredPalette().size());
+    std::vector<MixColor> result;
+    for (int first = 0; first < pigmentCount; first++)
+        for (int second = first; second < pigmentCount; second++)
+            for (int step = 1; step < shareSteps; step++)
+                for (int k = -stepsPerFactorOfTen; k <= stepsPerFactorOfTen; k++)
+                {
+                    float total = std::pow(10.0f, static_cast<float>(k) / stepsPerFactorOfTen);
+                    float firstShare = static_cast<float>(step) / shareSteps;
+                    TwoPigmentMix mix{first, total * firstShare, second, total * (1.0f - firstShare)};
+                    glm::vec3 color = colorFromMeasuredLayers({layerFromTwoPigmentMix(mix)}, glm::vec3(1.0f));
+                    result.push_back({mix, cielabFromRGB(color)});
+                }
+    return result;
+}
+
+// Returns the mix whose color over white paper is closest to the given color in CIELAB
+TwoPigmentMix closestMix(const glm::vec3 &color)
+{
+    // The mix colors do not depend on the given color, so they are computed on the first call and kept for later calls
+    static const std::vector<MixColor> mixColors = computeMixColors();
+
+    const glm::vec3 target = cielabFromRGB(color);
+    const MixColor *best = nullptr;
+    float bestDistance = 0.0f;
+    for (const MixColor &mixColor : mixColors)
+    {
+        float distance = glm::length(mixColor.cielab - target);
+        if (best == nullptr || distance < bestDistance)
+        {
+            best = &mixColor;
+            bestDistance = distance;
+        }
+    }
+    return best->mix;
+}
 } // namespace
 
 const std::vector<NamedMeasuredPigment> &measuredPalette()
@@ -133,6 +224,24 @@ MeasuredPigment measuredPigmentFromName(const std::string &name)
         if (entry.name == name)
             return entry.pigment;
     throw std::invalid_argument("Unknown measured pigment: " + name);
+}
+
+MeasuredPigment measuredPigmentFromRGB(const glm::vec3 &color)
+{
+    // Step 1: find the mix of two measured pigments that looks closest to color
+    TwoPigmentMix mix = closestMix(color);
+
+    // Step 2: mix them into one layer, whose thickness is the sum of the two
+    MeasuredLayer layer = layerFromTwoPigmentMix(mix);
+
+    // Step 3: the layer gives the color at layer.thickness, but thickness 1 should give it
+    // Multiplying K and S by a factor has the same effect as multiplying the thickness by it
+    for (int band = 0; band < measuredBands; band++)
+    {
+        layer.pigment.K[band] *= layer.thickness;
+        layer.pigment.S[band] *= layer.thickness;
+    }
+    return layer.pigment;
 }
 
 MeasuredLayer measuredLayerFromMix(const std::vector<MeasuredLayer> &parts)
