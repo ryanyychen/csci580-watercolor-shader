@@ -24,6 +24,7 @@ class WatercolorSim
     void flowOutward();
     void movePigment();
     void transferPigment();
+    void dryPaper();
 
     int width;
     int height;
@@ -33,6 +34,7 @@ class WatercolorSim
     std::vector<float> pressure;     // p
     std::vector<float> pigmentWater; // g, pigment floating in the water
     std::vector<float> pigmentPaper; // d, pigment settled on the paper
+    std::vector<float> paperWater;   // s, water soaked into the paper, from 0 (dry) to paperCapacity
 
     // water velocity on the cell edges (staggered grid)
     // u is (width + 1) x height, v is width x (height + 1)
@@ -44,6 +46,7 @@ class WatercolorSim
     float uAt(int i, int j);
     float vAt(int i, int j);
     float maxSpeed();
+    float paperCapacity(int k) const;
     void enforceBoundaries();
     std::vector<float> blurWetMask();
 };
